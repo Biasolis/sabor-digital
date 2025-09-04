@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # 1. Frontend (A nossa aplicação React)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80" # Expõe a nossa aplicação na porta 80 do seu computador
+    environment:
+      # Estas variáveis são injetadas no Nginx e depois na aplicação
+      - VITE_SUPABASE_URL=http://localhost:8000
+      - VITE_SUPABASE_ANON_KEY=${ANON_KEY} # Usa a chave do arquivo .env do Supabase
+    depends_on:
+      - supabase-kong # Garante que o Supabase esteja pronto antes da aplicação
+
+  # 2. Supabase (Serviços de Backend)
+  supabase-db:
+    image: supabase/postgres:14.1.0
+    restart: always
+    environment:
+      - POSTGRES_USER=supabase
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=postgres
+    volumes:
+      - ./supabase/volumes/db/data:/var/lib/postgresql/data
+      - ./supabase/volumes/db/init.sql:/docker-entrypoint-initdb.d/init.sql # Script de inicialização
+    ports:
+      - "5432:5432"
+
+  supabase-kong:
+    image: supabase/kong:latest
+    restart: always
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/var/lib/kong/kong.yml
+      - KONG_DNS_ORDER=LAST,A,CNAME
+      - KONG_PLUGINS=request-transformer,cors,pre-flight
+    volumes:
+      - ./supabase/volumes/kong/kong.yml:/var/lib/kong/kong.yml
+    ports:
+      - "8000:8000" # Gateway principal do Supabase
+      - "8443:8443"
+    depends_on:
+      - supabase-auth
+      - supabase-rest
+
+  supabase-auth:
+    image: supabase/gotrue:latest
+    restart: always
+    environment:
+      - GOTRUE_API_HOST=0.0.0.0
+      - GOTRUE_API_PORT=9999
+      - GOTRUE_JWT_SECRET=${JWT_SECRET}
+      - GOTRUE_DATABASE_URL=postgres://supabase:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      - GOTRUE_SITE_URL=http://localhost
+      - GOTRUE_URI_SCHEMES=http,https
+      - GOTRUE_MAILER_AUTOCONFIRM=true # Para desenvolvimento, confirma e-mails automaticamente
+    depends_on:
+      - supabase-db
+
+  supabase-rest:
+    image: postgrest/postgrest:latest
+    restart: always
+    environment:
+      - PGRST_DB_URI=postgres://supabase:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      - PGRST_DB_SCHEMA=public,storage
+      - PGRST_DB_ANON_ROLE=anon
+      - PGRST_JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - supabase-db
+
+  supabase-realtime:
+    image: supabase/realtime:latest
+    restart: always
+    environment:
+      - REALTIME_POSTGRES_HOST=supabase-db
+      - REALTIME_POSTGRES_PORT=5432
+      - REALTIME_POSTGRES_USER=supabase
+      - REALTIME_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REALTIME_POSTGRES_DB=postgres
+      - REALTIME_JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - supabase-db
+  
+  supabase-storage:
+    image: supabase/storage-api:latest
+    restart: always
+    environment:
+      - STORAGE_DATABASE_URL=postgres://supabase:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      - ANON_KEY=${ANON_KEY}
+      - SERVICE_KEY=${SERVICE_ROLE_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=postgres://supabase:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      - FILE_SIZE_LIMIT=52428800
+      - STORAGE_BACKEND=file
+      - TENANT_ID=stub
+      - REGION=stub
+      - GLOBAL_S3_BUCKET=stub
+    volumes:
+      - ./supabase/volumes/storage:/var/lib/storage
+    depends_on:
+      - supabase-db
+
+volumes:
+  db-data:
