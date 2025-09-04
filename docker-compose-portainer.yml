@@ -1,0 +1,165 @@
+version: "3.8"
+
+services:
+  # 1. Aplicação Frontend (Sabor Digital)
+  # Este serviço irá construir a sua aplicação React a partir do seu repositório Git
+  # e servi-la com um servidor web Nginx otimizado.
+  sabor-digital-frontend:
+    image: SEU_REGISTRY/sabor-digital-frontend:latest # O Portainer irá construir e guardar a imagem aqui
+    build:
+      context: . # Aponte para a raiz do seu repositório Git
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - network_public
+    environment:
+      # O VITE_SUPABASE_URL é o endereço público do seu Supabase, definido abaixo.
+      - VITE_SUPABASE_URL=https://supabase.seudominio.com.br
+      - VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.sabor-digital.rule=Host(`app.seudominio.com.br`)"
+        - "traefik.http.routers.sabor-digital.entrypoints=websecure"
+        - "traefik.http.routers.sabor-digital.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.sabor-digital.loadbalancer.server.port=80"
+
+  # 2. Supabase - Gateway de API (Público)
+  # Este é o único serviço do Supabase que é exposto publicamente.
+  supabase-kong:
+    image: supabase/kong:latest
+    restart: unless-stopped
+    networks:
+      - network_public
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/var/lib/kong/kong.yml
+      - KONG_DNS_ORDER=LAST,A,CNAME
+      - KONG_PLUGINS=request-transformer,cors,pre-flight
+    volumes:
+      - ./supabase/volumes/kong/kong.yml:/var/lib/kong/kong.yml
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.supabase-kong.rule=Host(`supabase.seudominio.com.br`)"
+        - "traefik.http.routers.supabase-kong.entrypoints=websecure"
+        - "traefik.http.routers.supabase-kong.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.supabase-kong.loadbalancer.server.port=8000"
+  
+  # 3. Evolution API (Público)
+  # Baseado no seu exemplo, configurado para esta stack.
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    restart: unless-stopped
+    networks:
+      - network_public
+    volumes:
+      - evolution_instances:/evolution/instances
+    environment:
+      - SERVER_URL=https://whatsapp-api.seudominio.com.br
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://supabase:${SUPABASE_DB_PASSWORD}@supabase-db:5432/postgres
+      # CORREÇÃO IMPORTANTE: Permite que a sua aplicação frontend aceda à API
+      - CORS_ALLOWED_ORIGINS=https://app.seudominio.com.br
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.evolution-api.rule=Host(`whatsapp-api.seudominio.com.br`)"
+        - "traefik.http.routers.evolution-api.entrypoints=websecure"
+        - "traefik.http.routers.evolution-api.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.evolution-api.loadbalancer.server.port=8080"
+
+  # --- SERVIÇOS INTERNOS DO SUPABASE (NÃO expostos publicamente) ---
+  supabase-db:
+    image: supabase/postgres:14.1.0
+    restart: unless-stopped
+    networks:
+      - network_public
+    environment:
+      - POSTGRES_USER=supabase
+      - POSTGRES_PASSWORD=${SUPABASE_DB_PASSWORD}
+      - POSTGRES_DB=postgres
+    volumes:
+      - sabor_digital_db_data:/var/lib/postgresql/data
+      - ./supabase/volumes/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  supabase-auth:
+    image: supabase/gotrue:latest
+    restart: unless-stopped
+    networks:
+      - network_public
+    environment:
+      - GOTRUE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - GOTRUE_DATABASE_URL=postgres://supabase:${SUPABASE_DB_PASSWORD}@supabase-db:5432/postgres
+      - GOTRUE_SITE_URL=https://app.seudominio.com.br
+      - GOTRUE_URI_SCHEMES=https,http
+      - GOTRUE_MAILER_AUTOCONFIRM=true
+    depends_on:
+      - supabase-db
+
+  supabase-rest:
+    image: postgrest/postgrest:latest
+    restart: unless-stopped
+    networks:
+      - network_public
+    environment:
+      - PGRST_DB_URI=postgres://supabase:${SUPABASE_DB_PASSWORD}@supabase-db:5432/postgres
+      - PGRST_DB_SCHEMA=public,storage
+      - PGRST_DB_ANON_ROLE=anon
+      - PGRST_JWT_SECRET=${SUPABASE_JWT_SECRET}
+    depends_on:
+      - supabase-db
+
+  supabase-realtime:
+    image: supabase/realtime:latest
+    restart: unless-stopped
+    networks:
+      - network_public
+    environment:
+      - REALTIME_POSTGRES_HOST=supabase-db
+      - REALTIME_POSTGRES_PORT=5432
+      - REALTIME_POSTGRES_USER=supabase
+      - REALTIME_POSTGRES_PASSWORD=${SUPABASE_DB_PASSWORD}
+      - REALTIME_POSTGRES_DB=postgres
+      - REALTIME_JWT_SECRET=${SUPABASE_JWT_SECRET}
+    depends_on:
+      - supabase-db
+  
+  supabase-storage:
+    image: supabase/storage-api:latest
+    restart: unless-stopped
+    networks:
+      - network_public
+    environment:
+      - STORAGE_DATABASE_URL=postgres://supabase:${SUPABASE_DB_PASSWORD}@supabase-db:5432/postgres
+      - ANON_KEY=${SUPABASE_ANON_KEY}
+      - SERVICE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - FILE_SIZE_LIMIT=52428800
+      - STORAGE_BACKEND=file
+    volumes:
+      - sabor_digital_storage_data:/var/lib/storage
+    depends_on:
+      - supabase-db
+
+# Definição dos Volumes Externos (devem ser criados no Portainer)
+volumes:
+  sabor_digital_db_data:
+    external: true
+    name: sabor_digital_db_data
+  sabor_digital_storage_data:
+    external: true
+    name: sabor_digital_storage_data
+  evolution_instances:
+    external: true
+    name: evolution_instances
+
+# Definição da Rede Externa (deve ser criada no Portainer)
+networks:
+  network_public:
+    external: true
+    name: network_public
+

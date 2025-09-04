@@ -1,0 +1,29 @@
+# Define a imagem Docker base para executar o pipeline
+image: docker:latest
+
+services:
+  - docker:dind
+
+# Define as fases do pipeline
+stages:
+  - build
+
+# Define o trabalho que irá construir a imagem
+build_image:
+  stage: build
+  variables:
+    # CI_REGISTRY_IMAGE é uma variável do GitLab que aponta para o seu registry
+    IMAGE_TAG: $CI_REGISTRY_IMAGE:latest
+  
+  # Faz o login no registry antes de executar o script
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+  # O script principal: constrói e envia a imagem
+  script:
+    - docker build -t $IMAGE_TAG .
+    - docker push $IMAGE_TAG
+  
+  # Define que este trabalho só executa na branch 'main'
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

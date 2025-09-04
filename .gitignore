@@ -22,5 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.gitlab-ci.yml
-docker-compose-portainer.yml
