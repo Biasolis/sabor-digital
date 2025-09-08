@@ -8,11 +8,11 @@ export default function CustomerManagement() {
   useEffect(() => {
     const fetchCustomers = async () => {
       setLoading(true);
+      // A linha .order() foi removida daqui, pois a coluna 'created_at' não existe na sua tabela.
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('role', 'customer')
-        .order('created_at', { ascending: false });
+        .eq('role', 'customer');
 
       if (error) {
         console.error("Erro ao buscar clientes:", error);
@@ -46,16 +46,24 @@ export default function CustomerManagement() {
             </tr>
           </thead>
           <tbody>
-            {customers.map(customer => (
-              <tr key={customer.id}>
-                <td>{customer.full_name}</td>
-                <td>{customer.email}</td>
-                <td>{customer.phone}</td>
-                <td>{customer.cpf}</td>
-                <td>{`${customer.address || ''}, ${customer.number || ''}`}</td>
-                <td>{customer.accepts_communications ? 'Sim' : 'Não'}</td>
+            {customers.length > 0 ? (
+              customers.map(customer => (
+                <tr key={customer.id}>
+                  <td>{customer.full_name}</td>
+                  <td>{customer.email}</td>
+                  <td>{customer.phone}</td>
+                  <td>{customer.cpf}</td>
+                  <td>{`${customer.address || ''}, ${customer.number || ''}`}</td>
+                  <td>{customer.accepts_communications ? 'Sim' : 'Não'}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
+                  Nenhum cliente encontrado.
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>

@@ -1,35 +1,40 @@
 import React from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-async function sendWhatsAppStatusUpdate(order) {
-    const { data: settings } = await supabase.from('store_settings').select('whatsapp_instance_name, whatsapp_status_template').eq('id', 1).single();
-    const evolutionApiUrl = import.meta.env.VITE_EVOLUTION_API_URL;
-    const evolutionApiKey = import.meta.env.VITE_EVOLUTION_API_KEY;
-
-    if (!evolutionApiUrl || !evolutionApiKey || !settings?.whatsapp_instance_name || !order.profiles?.phone || !order.profiles.accepts_communications) {
-        console.log("Notificação de WhatsApp não enviada (faltam configurações, permissão ou telefone).");
-        return;
+// Esta função agora vive no backend. Vamos chamar a API.
+async function triggerWhatsAppStatusUpdate(orderId) {
+    try {
+        await fetch('http://localhost:3001/notify/order-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId }),
+        });
+    } catch (error) {
+        console.error("Falha ao acionar a notificação de status:", error);
     }
-    
-    let message = (settings.whatsapp_status_template || 'Olá {cliente}! O estado do seu pedido #{pedido} foi atualizado para: *{status}*.')
-        .replace('{cliente}', order.profiles.full_name)
-        .replace('{pedido}', order.id)
-        .replace('{status}', order.status);
-
-    console.log(`SIMULANDO ENVIO WHATSAPP para ${order.profiles.phone}: "${message}"`);
 }
 
 export default function OrderDetailModal({ isOpen, onClose, order, onStatusChange }) {
   if (!isOpen || !order) return null;
 
   const handleStatusChange = async (newStatus) => {
-    const { data, error } = await supabase.from('orders').update({ status: newStatus }).eq('id', order.id).select('*, profiles(*)').single();
+    const { data, error } = await supabase
+      .from('orders')
+      .update({ status: newStatus })
+      .eq('id', order.id)
+      .select()
+      .single();
+
     if (error) {
       alert("Erro ao atualizar status: " + error.message);
     } else {
-      onStatusChange();
-      onClose();
-      sendWhatsAppStatusUpdate(data);
+      onStatusChange(); // Atualiza a lista de pedidos na UI
+      onClose(); // Fecha o modal
+      
+      // Aciona a notificação através do nosso backend
+      if (data) {
+        triggerWhatsAppStatusUpdate(data.id);
+      }
     }
   };
 
@@ -57,6 +62,7 @@ export default function OrderDetailModal({ isOpen, onClose, order, onStatusChang
                 <select className="status-select" defaultValue={order.status} onChange={(e) => handleStatusChange(e.target.value)}>
                   <option value="pending">Pendente</option>
                   <option value="accepted">Em Preparo</option>
+                  <option value="ready">Pronto</option>
                   <option value="delivered">Entregue</option>
                   <option value="cancelled">Cancelado</option>
                 </select>

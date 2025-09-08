@@ -1,29 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import StoreSettings from './StoreSettings';
-import WhatsAppIntegration from './WhatsAppIntegration';
 
 export default function SettingsManagement() {
-    const [activeTab, setActiveTab] = useState('store');
-    
+    // Como a integração antiga foi removida, exibimos diretamente as configurações da loja.
     return (
         <div className="admin-content">
-            <div className="page-header"><h2>Configurações</h2></div>
-            <div className="submenu-nav">
-                <button 
-                    onClick={() => setActiveTab('store')} 
-                    className={`submenu-btn ${activeTab === 'store' ? 'active' : ''}`}
-                >
-                    Loja
-                </button>
-                <button 
-                    onClick={() => setActiveTab('whatsapp')} 
-                    className={`submenu-btn ${activeTab === 'whatsapp' ? 'active' : ''}`}
-                >
-                    WhatsApp
-                </button>
+            <div className="page-header">
+                <h2>Configurações da Loja</h2>
             </div>
-            
-            {activeTab === 'store' ? <StoreSettings /> : <WhatsAppIntegration />}
+            <StoreSettings />
         </div>
     );
 }

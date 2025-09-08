@@ -8,6 +8,7 @@ export default function MyOrders({ isOpen, onClose, session }) {
   const statusMap = {
     pending: { text: "Pendente", class: "pending" },
     accepted: { text: "Em Preparo", class: "accepted" },
+    ready: { text: "Pronto para Retirada/Entrega", class: "ready" },
     delivered: { text: "Entregue", class: "delivered" },
     cancelled: { text: "Cancelado", class: "cancelled" },
   };

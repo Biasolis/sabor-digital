@@ -11,7 +11,7 @@ const UserList = () => {
     const { data, error } = await supabase
       .from('profiles')
       .select('id, email, full_name, role')
-      .in('role', ['admin', 'caixa', 'garcom']);
+      .in('role', ['admin', 'caixa', 'garcom', 'cozinha']);
     
     if (error) console.error("Erro ao buscar utilizadores:", error);
     else setUsers(data);
@@ -65,6 +65,7 @@ const UserList = () => {
               <select defaultValue={user.role} onChange={(e) => handleRoleChange(user.id, e.target.value)}>
                 <option value="caixa">Caixa</option>
                 <option value="garcom">Garçom</option>
+                <option value="cozinha">Cozinha</option>
                 <option value="admin">Administrador</option>
               </select>
             </td>
@@ -105,7 +106,7 @@ const InviteUser = () => {
     <form onSubmit={handleCreateUser} className="product-form" style={{marginTop: '2rem'}}>
       <h3>Convidar Novo Utilizador</h3>
       <div className="form-group"><label htmlFor="email">E-mail do Utilizador</label><input type="email" id="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-      <div className="form-group"><label htmlFor="role">Função</label><select id="role" value={role} onChange={(e) => setRole(e.target.value)}><option value="caixa">Caixa</option><option value="garcom">Garçom</option><option value="admin">Administrador</option></select></div>
+      <div className="form-group"><label htmlFor="role">Função</label><select id="role" value={role} onChange={(e) => setRole(e.target.value)}><option value="caixa">Caixa</option><option value="garcom">Garçom</option><option value="cozinha">Cozinha</option><option value="admin">Administrador</option></select></div>
       <div className="form-actions"><button type="submit" className="btn btn-primary" disabled={loading}>{loading ? 'A criar...' : 'Criar e Convidar'}</button></div>
     </form>
   );

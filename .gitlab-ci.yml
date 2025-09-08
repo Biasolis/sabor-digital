@@ -12,14 +12,15 @@ stages:
 build_image:
   stage: build
   variables:
-    # CI_REGISTRY_IMAGE é uma variável do GitLab que aponta para o seu registry
-    IMAGE_TAG: $CI_REGISTRY_IMAGE:latest
+    # Define a tag da imagem para o formato do Docker Hub, usando o seu nome de utilizador
+    # e o nome do projeto GitLab (ex: seu_user/v8-app:latest)
+    IMAGE_TAG: $DOCKERHUB_USERNAME/$CI_PROJECT_NAME:latest
   
-  # Faz o login no registry antes de executar o script
+  # Faz o login no Docker Hub usando as variáveis de ambiente seguras
   before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_TOKEN
 
-  # O script principal: constrói e envia a imagem
+  # O script principal: constrói e envia a imagem para o Docker Hub
   script:
     - docker build -t $IMAGE_TAG .
     - docker push $IMAGE_TAG

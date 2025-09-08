@@ -7,15 +7,31 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "80:80" # Expõe a nossa aplicação na porta 80 do seu computador
+      - "80:80"
     environment:
-      # Estas variáveis são injetadas no Nginx e depois na aplicação
       - VITE_SUPABASE_URL=http://localhost:8000
-      - VITE_SUPABASE_ANON_KEY=${ANON_KEY} # Usa a chave do arquivo .env do Supabase
+      - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
     depends_on:
-      - supabase-kong # Garante que o Supabase esteja pronto antes da aplicação
+      - supabase-kong
 
-  # 2. Supabase (Serviços de Backend)
+  # 2. NOVO SERVIÇO: Backend do WhatsApp
+  whatsapp-backend:
+    build:
+      context: ./whatsapp-backend
+    ports:
+      - "3001:3001" # Expõe a porta do nosso novo servidor
+    volumes:
+      - ./whatsapp-backend:/app # Mapeia os arquivos para desenvolvimento
+      - /app/node_modules
+    environment:
+      # Futuramente, colocaremos as variáveis de conexão do Supabase aqui
+      - SUPABASE_URL=http://supabase-kong:8000
+      - SUPABASE_ANON_KEY=${ANON_KEY}
+    depends_on:
+      - supabase-kong
+    command: npm start
+
+  # 3. Supabase (Serviços de Backend)
   supabase-db:
     image: supabase/postgres:14.1.0
     restart: always
@@ -25,7 +41,7 @@ services:
       - POSTGRES_DB=postgres
     volumes:
       - ./supabase/volumes/db/data:/var/lib/postgresql/data
-      - ./supabase/volumes/db/init.sql:/docker-entrypoint-initdb.d/init.sql # Script de inicialização
+      - ./supabase/volumes/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
 
@@ -40,7 +56,7 @@ services:
     volumes:
       - ./supabase/volumes/kong/kong.yml:/var/lib/kong/kong.yml
     ports:
-      - "8000:8000" # Gateway principal do Supabase
+      - "8000:8000"
       - "8443:8443"
     depends_on:
       - supabase-auth
@@ -56,7 +72,7 @@ services:
       - GOTRUE_DATABASE_URL=postgres://supabase:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
       - GOTRUE_SITE_URL=http://localhost
       - GOTRUE_URI_SCHEMES=http,https
-      - GOTRUE_MAILER_AUTOCONFIRM=true # Para desenvolvimento, confirma e-mails automaticamente
+      - GOTRUE_MAILER_AUTOCONFIRM=true
     depends_on:
       - supabase-db
 

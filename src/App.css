@@ -181,3 +181,90 @@ input:checked + .slider:before { transform: translateX(22px); }
 .promotions-slider { display: flex; transition: transform 0.5s ease-in-out; }
 .promotion-slide { min-width: 100%; position: relative; }
 .promotion-slide img { width: 100%; height: auto; display: block; }
+
+/* --- ESTILOS TELA DA COZINHA (KDS) --- */
+.kitchen-display { width: 100%; height: 100%; padding: 2rem; background-color: #f3f4f6; display: flex; flex-direction: column; }
+.kitchen-header { text-align: center; margin-bottom: 2rem; }
+.kitchen-header h1 { font-size: 2rem; font-weight: 700; margin: 0; }
+.kitchen-header p { color: #4b5563; }
+.kds-order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; overflow-y: auto; flex-grow: 1; padding: 1rem; }
+.kds-order-card { background-color: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 1.5rem; display: flex; flex-direction: column; }
+.kds-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1rem; }
+.kds-card-header h3 { font-size: 1.2rem; margin: 0; }
+.kds-card-header span { font-weight: 500; color: #374151; }
+.kds-item-list { list-style: none; padding: 0; margin: 0; flex-grow: 1; }
+.kds-item-list li { padding: 0.5rem 0; font-size: 1rem; }
+.kds-item-list li strong { margin-right: 0.5rem; }
+.btn-ready { width: 100%; padding: 0.75rem; background-color: #16a34a; color: white; border-radius: 0.5rem; font-weight: 600; margin-top: 1rem; }
+.btn-ready:hover { background-color: #15803d; }
+.loading-message, .no-orders-message { text-align: center; font-size: 1.2rem; color: #6b7280; padding: 4rem 0; }
+.status-badge.ready { background-color: #16a34a; }
+.order-card.status-ready { border-color: #16a34a; }
+
+/* --- ESTILOS GESTÃO WHATSAPP --- */
+.whatsapp-status-card {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+  margin-top: 2rem;
+  text-align: center;
+}
+.whatsapp-status-card h4 {
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+.status-indicator {
+  font-size: 1.5rem;
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  display: inline-block;
+}
+.status-conectado {
+  color: #166534;
+  background-color: #dcfce7;
+}
+.status-desconectado {
+  color: #991b1b;
+  background-color: #fee2e2;
+}
+.status-aguardando-leitura-do-qr-code {
+  color: #92400e;
+  background-color: #fef3c7;
+}
+.qr-code-container {
+  margin-top: 2rem;
+  display: inline-block;
+}
+.qr-code-container p {
+  margin-bottom: 1rem;
+}
+
+/* --- ESTILOS WHATSAPP SETTINGS --- */
+.settings-list {
+  margin-top: 2rem;
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.settings-list .toggle-group {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.settings-list .toggle-group:last-child {
+  border-bottom: none;
+}
+
+.settings-list .toggle-group label:first-child {
+  flex-grow: 1;
+}
+
+.settings-list .toggle-group p {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
