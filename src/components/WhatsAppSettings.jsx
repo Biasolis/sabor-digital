@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function WhatsAppSettings() {
-  const [settings, setSettings] = useState({ send_order_updates: true });
+  const [settings, setSettings] = useState({ send_order_updates: true, process_group_messages: false });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,8 +42,8 @@ export default function WhatsAppSettings() {
 
   return (
     <div>
-      <h4>Notificações Automáticas</h4>
-      <p>Controle as mensagens que são enviadas automaticamente aos clientes.</p>
+      <h4>Configurações Gerais</h4>
+      <p>Controle o comportamento do seu sistema de atendimento via WhatsApp.</p>
 
       <div className="settings-list">
         <div className="toggle-group">
@@ -61,7 +61,23 @@ export default function WhatsAppSettings() {
             <span className="slider"></span>
           </label>
         </div>
-        {/* Futuras configurações podem ser adicionadas aqui */}
+
+        {/* --- NOVA CONFIGURAÇÃO --- */}
+        <div className="toggle-group">
+          <label htmlFor="process_group_messages">
+            <strong>Processar mensagens de grupos</strong>
+            <p>Se desativado, o sistema irá ignorar todas as mensagens enviadas em grupos.</p>
+          </label>
+          <label className="toggle-switch">
+            <input 
+              type="checkbox" 
+              id="process_group_messages" 
+              checked={settings.process_group_messages} 
+              onChange={(e) => handleSettingChange('process_group_messages', e.target.checked)} 
+            />
+            <span className="slider"></span>
+          </label>
+        </div>
       </div>
     </div>
   );

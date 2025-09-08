@@ -268,3 +268,9 @@ input:checked + .slider:before { transform: translateX(22px); }
   color: #6b7280;
   margin-top: 0.25rem;
 }
+
+.connection-actions {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste de Conexão Socket.IO</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Teste de Conexão Socket.IO</h1>
+    <p>Abra as ferramentas de desenvolvedor (F12) e verifique o separador "Console".</p>
+    <div id="status" style="font-size: 1.5rem; font-weight: bold;">Status: A tentar conectar...</div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const backendUrl = 'http://localhost:3001';
+        
+        console.log(`A tentar conectar ao servidor em ${backendUrl}`);
+        statusDiv.innerText = `Status: A tentar conectar a ${backendUrl}`;
+
+        const socket = io(backendUrl);
+
+        socket.on('connect', () => {
+            console.log('SUCESSO: Conectado ao servidor!');
+            statusDiv.innerText = 'Status: SUCESSO - Conectado!';
+            statusDiv.style.color = 'green';
+        });
+
+        socket.on('connect_error', (err) => {
+            console.error('FALHA: Erro de conexão!', err);
+            statusDiv.innerText = `Status: FALHA - Erro de Conexão: ${err.message}`;
+            statusDiv.style.color = 'red';
+        });
+
+        socket.on('status', (data) => {
+            console.log('Evento de "status" recebido:', data);
+            statusDiv.innerText = `Status: SUCESSO - Conectado! Status recebido: ${data.status}`;
+        });
+    </script>
+</body>
+</html>

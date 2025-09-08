@@ -243,15 +243,23 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.whatsapp_messages;
 -- 8. TABELA PARA CONFIGURAÇÕES DO WHATSAPP
 -- ====================================================================================
 
+-- ====================================================================================
+-- 8. TABELA PARA CONFIGURAÇÕES DO WHATSAPP
+-- ====================================================================================
+
 CREATE TABLE public.whatsapp_settings (
     id BIGINT PRIMARY KEY DEFAULT 1,
     send_order_updates BOOLEAN DEFAULT true,
     send_promotions BOOLEAN DEFAULT true,
+    process_group_messages BOOLEAN DEFAULT false, -- <-- NOVA COLUNA
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     CONSTRAINT singleton_check CHECK (id = 1)
 );
 ALTER TABLE public.whatsapp_settings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow admin access to whatsapp settings" ON public.whatsapp_settings FOR ALL USING ( (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'::public.user_role );
 
--- Insere a linha de configuração padrão
-INSERT INTO public.whatsapp_settings (id, send_order_updates) VALUES (1, true) ON CONFLICT (id) DO NOTHING;
+-- Insere a linha de configuração padrão com o novo valor
+INSERT INTO public.whatsapp_settings (id, send_order_updates, process_group_messages) VALUES (1, true, false) ON CONFLICT (id) DO UPDATE 
+SET 
+    send_order_updates = EXCLUDED.send_order_updates,
+    process_group_messages = EXCLUDED.process_group_messages;
