@@ -4,34 +4,175 @@ import { supabase } from '../lib/supabaseClient';
 export default function CustomerManagement() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentCustomer, setCurrentCustomer] = useState({
+    id: null, full_name: '', email: '', phone: '', cpf: '', address: '', number: '', cep: ''
+  });
+
+  const fetchCustomers = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'customer')
+      .order('full_name', { ascending: true });
+
+    if (error) {
+      console.error("Erro ao buscar clientes:", error);
+    } else {
+      setCustomers(data);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      setLoading(true);
-      // A linha .order() foi removida daqui, pois a coluna 'created_at' não existe na sua tabela.
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'customer');
-
-      if (error) {
-        console.error("Erro ao buscar clientes:", error);
-      } else {
-        setCustomers(data);
-      }
-      setLoading(false);
-    };
     fetchCustomers();
   }, []);
 
-  if (loading) return <p>A carregar clientes...</p>;
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setCurrentCustomer(prev => ({ ...prev, [name]: value }));
+  };
+
+  const resetForm = () => {
+    setIsEditing(false);
+    setCurrentCustomer({ id: null, full_name: '', email: '', phone: '', cpf: '', address: '', number: '', cep: '' });
+  };
+
+  const handleNewClick = () => {
+    resetForm();
+    setShowForm(true);
+  };
+
+  const handleEditClick = (customer) => {
+    setIsEditing(true);
+    setCurrentCustomer(customer);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (customer) => {
+    if (window.confirm(`Tem a certeza que deseja apagar o cliente ${customer.full_name}? Esta ação não pode ser desfeita e irá remover o seu login.`)) {
+      const { error } = await supabase.auth.admin.deleteUser(customer.id);
+      if (error) {
+        alert('Erro ao apagar cliente: ' + error.message);
+      } else {
+        alert('Cliente apagado com sucesso.');
+        fetchCustomers();
+      }
+    }
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    if (isEditing) {
+      // Apenas atualiza o perfil, pois não se deve alterar o e-mail (login)
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: currentCustomer.full_name,
+          phone: currentCustomer.phone,
+          cpf: currentCustomer.cpf,
+          address: currentCustomer.address,
+          number: currentCustomer.number,
+          cep: currentCustomer.cep
+        })
+        .eq('id', currentCustomer.id);
+
+      if (error) {
+        alert('Erro ao atualizar cliente: ' + error.message);
+      } else {
+        alert('Cliente atualizado com sucesso!');
+        setShowForm(false);
+        fetchCustomers();
+      }
+    } else {
+      // Cria um novo utilizador de autenticação e o trigger criará o perfil
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: currentCustomer.email,
+        password: Math.random().toString(36).slice(-8), // Senha temporária
+        email_confirm: true,
+        user_metadata: {
+          full_name: currentCustomer.full_name,
+          role: 'customer'
+        }
+      });
+      
+      if (authError) {
+        alert('Erro ao criar o utilizador: ' + authError.message);
+      } else {
+        // Atualiza o perfil recém-criado com os dados adicionais
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            phone: currentCustomer.phone,
+            cpf: currentCustomer.cpf,
+            address: currentCustomer.address,
+            number: currentCustomer.number,
+            cep: currentCustomer.cep
+          })
+          .eq('id', authData.user.id);
+        
+        if (profileError) {
+          alert('Utilizador criado, mas falha ao salvar detalhes: ' + profileError.message);
+        } else {
+          alert('Cliente criado com sucesso! Um e-mail para definição de senha foi enviado.');
+          setShowForm(false);
+          fetchCustomers();
+        }
+      }
+    }
+    setLoading(false);
+    resetForm();
+  };
 
   return (
     <div className="admin-content">
       <div className="page-header">
         <h2>Gestão de Clientes</h2>
+        {!showForm && <button className="btn btn-primary" onClick={handleNewClick}>Adicionar Cliente</button>}
       </div>
-      <p>Visualize os dados de todos os clientes cadastrados.</p>
+      <p>Adicione, edite ou remova os clientes cadastrados.</p>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="product-form">
+          <h3>{isEditing ? 'Editar Cliente' : 'Novo Cliente'}</h3>
+          <div className="form-group">
+            <label>Nome Completo</label>
+            <input type="text" name="full_name" value={currentCustomer.full_name || ''} onChange={handleInputChange} required />
+          </div>
+          <div className="form-group">
+            <label>E-mail (Login)</label>
+            <input type="email" name="email" value={currentCustomer.email || ''} onChange={handleInputChange} required disabled={isEditing} />
+          </div>
+          <div className="form-group">
+            <label>Telefone</label>
+            <input type="text" name="phone" value={currentCustomer.phone || ''} onChange={handleInputChange} />
+          </div>
+           <div className="form-group">
+            <label>CPF</label>
+            <input type="text" name="cpf" value={currentCustomer.cpf || ''} onChange={handleInputChange} />
+          </div>
+          <div className="form-group">
+            <label>Morada</label>
+            <input type="text" name="address" value={currentCustomer.address || ''} onChange={handleInputChange} />
+          </div>
+           <div className="form-group">
+            <label>Número</label>
+            <input type="text" name="number" value={currentCustomer.number || ''} onChange={handleInputChange} />
+          </div>
+           <div className="form-group">
+            <label>CEP</label>
+            <input type="text" name="cep" value={currentCustomer.cep || ''} onChange={handleInputChange} />
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-primary" disabled={loading}>{isEditing ? 'Salvar' : 'Criar'}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
+          </div>
+        </form>
+      )}
 
       <div className="product-table-wrapper">
         <table className="product-table">
@@ -40,30 +181,21 @@ export default function CustomerManagement() {
               <th>Nome</th>
               <th>E-mail</th>
               <th>Telefone</th>
-              <th>CPF</th>
-              <th>Morada</th>
-              <th>Comunicações</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
-            {customers.length > 0 ? (
-              customers.map(customer => (
-                <tr key={customer.id}>
-                  <td>{customer.full_name}</td>
-                  <td>{customer.email}</td>
-                  <td>{customer.phone}</td>
-                  <td>{customer.cpf}</td>
-                  <td>{`${customer.address || ''}, ${customer.number || ''}`}</td>
-                  <td>{customer.accepts_communications ? 'Sim' : 'Não'}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
-                  Nenhum cliente encontrado.
+            {customers.map(customer => (
+              <tr key={customer.id}>
+                <td>{customer.full_name}</td>
+                <td>{customer.email}</td>
+                <td>{customer.phone}</td>
+                <td className="actions-cell">
+                  <button onClick={() => handleEditClick(customer)}>Editar</button>
+                  <button onClick={() => handleDelete(customer)}>Apagar</button>
                 </td>
               </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </div>

@@ -35,9 +35,11 @@ const authFolder = 'auth_info_baileys';
 
 // --- Funções Auxiliares do Supabase ---
 const upsertChat = async (chat) => {
+  // Ao receber uma nova mensagem, a conversa deve ser sempre reaberta.
+  const chatData = { ...chat, status: 'open' };
   const { data, error } = await supabase
     .from('whatsapp_chats')
-    .upsert(chat, { onConflict: 'id' });
+    .upsert(chatData, { onConflict: 'id' });
   if (error) console.error('Erro ao salvar chat:', error);
   return data;
 };
@@ -90,18 +92,25 @@ async function sendOrderStatusUpdate(orderId) {
 
 // --- Lógica Principal do Baileys ---
 async function connectToWhatsApp() {
-  if (sock || connectionStatus === 'Conectando...') {
-    console.log('Conexão já em andamento ou estabelecida.');
-    return;
+  if (sock) {
+    console.log('Já existe uma conexão. Fechando a antiga...');
+    try {
+      await sock.logout();
+    } catch (error) {
+      console.error('Erro ao desconectar a sessão antiga:', error);
+    } finally {
+      sock = undefined;
+    }
   }
-
+  
   connectionStatus = 'Conectando...';
   io.emit('status', { status: connectionStatus });
-
-  const { state, saveCreds } = await useMultiFileAuthState(authFolder);
   
+  const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+
   sock = makeWASocket({
     auth: state,
+    printQRInTerminal: true,
     browser: ["Sabor Digital", "Chrome", "1.0.0"],
   });
 
@@ -111,30 +120,27 @@ async function connectToWhatsApp() {
     if (qr) {
       qrCodeData = qr;
       connectionStatus = 'Aguardando leitura do QR Code';
-      console.log('QR Code recebido, escaneie com seu celular:');
-      qrcode.generate(qr, { small: true });
+      console.log('QR Code recebido, escaneie com seu celular.');
       io.emit('qr', qr);
       io.emit('status', { status: connectionStatus });
     }
 
     if (connection === 'close') {
-      const statusCode = (lastDisconnect.error)?.output?.statusCode;
-
-      if (statusCode === DisconnectReason.loggedOut) {
-        connectionStatus = 'Desconectado (Logout)';
+      const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
+      
+      if (reason === DisconnectReason.loggedOut) {
         console.log('Desconectado pelo usuário. A apagar sessão...');
         if (fs.existsSync(authFolder)) {
           fs.rmSync(authFolder, { recursive: true, force: true });
         }
-        // Não reconecta automaticamente, espera um novo comando do usuário
-        sock = null; 
-        io.emit('status', { status: 'Desconectado' });
-        
-      } else {
         connectionStatus = 'Desconectado';
-        console.log('Conexão perdida. A tentar reconectar...');
         io.emit('status', { status: connectionStatus });
-        setTimeout(connectToWhatsApp, 5000); // Tenta reconectar se não for logout
+        sock = undefined;
+      } else {
+        console.log('Conexão perdida. Motivo:', reason, '. Tentando reconectar...');
+        connectionStatus = 'Reconectando...';
+        io.emit('status', { status: connectionStatus });
+        setTimeout(connectToWhatsApp, 10000);
       }
     } else if (connection === 'open') {
       connectionStatus = 'Conectado';

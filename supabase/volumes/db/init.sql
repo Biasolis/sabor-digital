@@ -145,6 +145,7 @@ CREATE POLICY "Users can insert their own profile." ON public.profiles FOR INSER
 CREATE POLICY "Users can update own profile." ON public.profiles FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Allow admins to read all user profiles" ON public.profiles FOR SELECT USING ( (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'::public.user_role );
 CREATE POLICY "Allow admins to update any user profile" ON public.profiles FOR UPDATE USING ( (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'::public.user_role ) WITH CHECK ( (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'::public.user_role );
+CREATE POLICY "Allow admins to delete user profiles" ON public.profiles FOR DELETE USING ( (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'::public.user_role );
 
 -- Policies para 'products' e 'categories' (leitura pública)
 CREATE POLICY "Public can read products" ON public.products FOR SELECT USING (true);
@@ -216,7 +217,8 @@ CREATE TABLE public.whatsapp_chats (
     name TEXT,
     unread_count INT DEFAULT 0,
     last_message_timestamp TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    status TEXT DEFAULT 'open'::text NOT NULL
 );
 ALTER TABLE public.whatsapp_chats ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow admin access to chats" ON public.whatsapp_chats FOR ALL USING ( (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'::public.user_role );
@@ -243,15 +245,11 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.whatsapp_messages;
 -- 8. TABELA PARA CONFIGURAÇÕES DO WHATSAPP
 -- ====================================================================================
 
--- ====================================================================================
--- 8. TABELA PARA CONFIGURAÇÕES DO WHATSAPP
--- ====================================================================================
-
 CREATE TABLE public.whatsapp_settings (
     id BIGINT PRIMARY KEY DEFAULT 1,
     send_order_updates BOOLEAN DEFAULT true,
     send_promotions BOOLEAN DEFAULT true,
-    process_group_messages BOOLEAN DEFAULT false, -- <-- NOVA COLUNA
+    process_group_messages BOOLEAN DEFAULT false,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     CONSTRAINT singleton_check CHECK (id = 1)
 );

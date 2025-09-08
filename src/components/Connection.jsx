@@ -5,7 +5,7 @@ import QRCode from 'react-qr-code';
 const backendUrl = import.meta.env.VITE_WHATSAPP_BACKEND_URL || 'http://localhost:3001';
 
 export default function Connection() {
-  const [status, setStatus] = useState('Desconectado'); // O estado inicial agora é 'Desconectado'
+  const [status, setStatus] = useState('Desconectado');
   const [qrCode, setQrCode] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
   
@@ -24,7 +24,7 @@ export default function Connection() {
 
     const onStatus = (newStatus) => {
       setStatus(newStatus.status);
-      if (newStatus.status === 'Conectado') {
+      if (newStatus.status !== 'Aguardando leitura do QR Code') {
         setQrCode('');
       }
     };
@@ -33,11 +33,18 @@ export default function Connection() {
       setStatus('Aguardando leitura do QR Code');
       setQrCode(qr);
     };
+    
+    const onDisconnect = () => {
+        setStatus('Desconectado');
+        setQrCode('');
+    }
 
     socket.on('connect', onConnect);
     socket.on('connect_error', onConnectError);
     socket.on('status', onStatus);
     socket.on('qr', onQr);
+    socket.on('disconnect', onDisconnect);
+
 
     return () => {
       console.log('A desligar listeners do Socket.IO...');
@@ -86,7 +93,7 @@ export default function Connection() {
       )}
 
       <div className="connection-actions">
-        {status === 'Desconectado' && (
+        {status !== 'Conectado' && status !== 'Conectando...' && status !== 'Reconectando...' && (
           <button className="btn btn-primary" onClick={handleConnect} disabled={isActionLoading}>
             {isActionLoading ? 'A iniciar...' : 'Conectar WhatsApp'}
           </button>
