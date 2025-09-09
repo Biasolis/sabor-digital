@@ -13,11 +13,12 @@ dotenv.config();
 
 // --- Configuração do Supabase ---
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Chave de Admin
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('Supabase URL and Service Key are required. Make sure you have a .env file in the whatsapp-backend directory.');
 }
+// Este cliente Supabase tem privilégios de administrador
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const app = express();
@@ -71,16 +72,16 @@ async function sendOrderStatusUpdate(orderId) {
   
   const { data: order, error: orderError } = await supabase
     .from('orders')
-    .select('status, profiles(full_name, phone)')
+    .select('status, contacts(full_name, phone)')
     .eq('id', orderId)
     .single();
 
-  if (orderError || !order || !order.profiles?.phone) {
+  if (orderError || !order || !order.contacts?.phone) {
     console.log(`Pedido #${orderId} ou telefone do cliente não encontrado. Notificação ignorada.`);
     return;
   }
 
-  const { profiles: customer, status } = order;
+  const { contacts: customer, status } = order;
   const message = `Olá, ${customer.full_name}! O status do seu pedido #${orderId} foi atualizado para: *${status}*.`;
   const number = customer.phone.replace(/\D/g, '');
   const jid = `${number}@s.whatsapp.net`;
@@ -172,42 +173,32 @@ async function connectToWhatsApp() {
         continue;
       }
 
-      // --- NOVO: Lógica para criar cliente automaticamente ---
       if (!msg.key.fromMe && !isGroup) {
         const phoneNumber = chatId.split('@')[0];
-        const { data: existingProfile, error: profileError } = await supabase
-          .from('profiles')
+        const { data: existingContact, error: contactError } = await supabase
+          .from('contacts')
           .select('id')
           .eq('phone', phoneNumber)
           .maybeSingle();
 
-        if (profileError) {
-          console.error(`Erro ao verificar perfil para ${phoneNumber}:`, profileError.message);
-        } else if (!existingProfile) {
-          console.log(`Perfil não encontrado para ${phoneNumber}. Criando novo cliente...`);
-          const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-            email: `${phoneNumber}@internal.sabordigital.app`,
-            password: Math.random().toString(36).slice(-12),
-            email_confirm: true,
-            user_metadata: { full_name: msg.pushName || phoneNumber, role: 'customer' }
-          });
+        if (contactError) {
+          console.error(`Erro ao verificar contato para ${phoneNumber}:`, contactError.message);
+        } else if (!existingContact) {
+          console.log(`Contato não encontrado para ${phoneNumber}. Criando novo contato...`);
+          const { error: insertError } = await supabase
+            .from('contacts')
+            .insert({
+              phone: phoneNumber,
+              full_name: msg.pushName || phoneNumber
+            });
 
-          if (authError) {
-            console.error(`Erro ao criar utilizador de autenticação para ${phoneNumber}:`, authError.message);
+          if (insertError) {
+            console.error(`Erro ao criar contato para ${phoneNumber}:`, insertError.message);
           } else {
-            const { error: updateError } = await supabase
-              .from('profiles')
-              .update({ phone: phoneNumber })
-              .eq('id', authData.user.id);
-            if (updateError) {
-              console.error(`Erro ao atualizar perfil com telefone para ${phoneNumber}:`, updateError.message);
-            } else {
-              console.log(`Perfil para ${phoneNumber} criado com sucesso.`);
-            }
+            console.log(`Contato para ${phoneNumber} criado com sucesso.`);
           }
         }
       }
-      // --- FIM DO NOVO BLOCO ---
 
       const senderId = msg.key.fromMe ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : msg.key.participant || msg.key.remoteJid;
       const messageTimestamp = new Date(Number(msg.messageTimestamp) * 1000);
@@ -225,6 +216,8 @@ async function connectToWhatsApp() {
     }
   });
 }
+
+// --- ROTAS DA API ---
 
 // Rota para status
 app.get('/status', (req, res) => {
@@ -285,6 +278,41 @@ app.post('/notify/order-update', (req, res) => {
   sendOrderStatusUpdate(orderId).catch(err => console.error(`Falha ao processar notificação para pedido ${orderId}:`, err));
   res.status(202).json({ message: 'Solicitação de notificação recebida.' });
 });
+
+// Nova rota para atualizar o status da loja
+app.post('/update-store-status', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Token não fornecido.' });
+
+    // Verifica se o token pertence a um admin
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user || user.user_metadata?.role !== 'admin') {
+      return res.status(403).json({ error: 'Acesso não autorizado.' });
+    }
+
+    // Se for admin, executa a operação
+    const { is_open } = req.body;
+    const updateData = { id: 1, is_open };
+    if (is_open) {
+      updateData.last_opened_at = new Date().toISOString();
+    }
+    
+    // O cliente supabase principal já usa a service_key, então ele contorna o RLS
+    const { data, error } = await supabase
+      .from('store_settings')
+      .upsert(updateData)
+      .select()
+      .single();
+
+    if (error) throw error;
+    
+    res.status(200).json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 io.on('connection', (socket) => {
   console.log('Frontend conectado via Socket.IO');

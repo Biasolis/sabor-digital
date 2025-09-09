@@ -7,21 +7,37 @@ export default function CustomerManagement() {
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentCustomer, setCurrentCustomer] = useState({
-    id: null, full_name: '', email: '', phone: '', cpf: '', address: '', number: '', cep: ''
+    id: null,
+    contact_id: null,
+    full_name: '', 
+    email: '', 
+    phone: '', 
+    cpf: '', 
+    address: '', 
+    number: '', 
+    cep: '',
+    neighborhood: '',
+    complement: ''
   });
 
   const fetchCustomers = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('*, contacts(*)')
       .eq('role', 'customer')
-      .order('full_name', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error("Erro ao buscar clientes:", error);
     } else {
-      setCustomers(data);
+      const formattedCustomers = data.map(p => ({
+        id: p.id,
+        contact_id: p.contact_id,
+        email: p.contacts?.email,
+        ...p.contacts
+      }));
+      setCustomers(formattedCustomers);
     }
     setLoading(false);
   };
@@ -37,7 +53,7 @@ export default function CustomerManagement() {
 
   const resetForm = () => {
     setIsEditing(false);
-    setCurrentCustomer({ id: null, full_name: '', email: '', phone: '', cpf: '', address: '', number: '', cep: '' });
+    setCurrentCustomer({ id: null, contact_id: null, full_name: '', email: '', phone: '', cpf: '', address: '', number: '', cep: '', neighborhood: '', complement: '' });
   };
 
   const handleNewClick = () => {
@@ -53,8 +69,6 @@ export default function CustomerManagement() {
 
   const handleDelete = async (customer) => {
     if (window.confirm(`Tem a certeza que deseja apagar o cliente ${customer.full_name}? Esta ação não pode ser desfeita e irá remover o seu login.`)) {
-      
-      // Alterado para chamar a Edge Function segura
       const { data, error } = await supabase.functions.invoke('delete-user', {
         body: { user_id: customer.id },
       });
@@ -74,16 +88,19 @@ export default function CustomerManagement() {
 
     if (isEditing) {
       const { error } = await supabase
-        .from('profiles')
+        .from('contacts')
         .update({
           full_name: currentCustomer.full_name,
           phone: currentCustomer.phone,
           cpf: currentCustomer.cpf,
           address: currentCustomer.address,
           number: currentCustomer.number,
-          cep: currentCustomer.cep
+          cep: currentCustomer.cep,
+          neighborhood: currentCustomer.neighborhood,
+          complement: currentCustomer.complement,
+          email: currentCustomer.email
         })
-        .eq('id', currentCustomer.id);
+        .eq('id', currentCustomer.contact_id);
 
       if (error) {
         alert('Erro ao atualizar cliente: ' + error.message);
@@ -102,7 +119,8 @@ export default function CustomerManagement() {
           data: {
             full_name: currentCustomer.full_name,
             role: 'customer'
-          }
+          },
+          phone: currentCustomer.phone 
         }
       });
       
@@ -113,23 +131,30 @@ export default function CustomerManagement() {
       if (authError) {
         alert('Erro ao criar o utilizador: ' + authError.message);
       } else if (authData.user){
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            phone: currentCustomer.phone,
-            cpf: currentCustomer.cpf,
-            address: currentCustomer.address,
-            number: currentCustomer.number,
-            cep: currentCustomer.cep
-          })
-          .eq('id', authData.user.id);
-        
-        if (profileError) {
-          alert('Utilizador criado, mas falha ao salvar detalhes: ' + profileError.message);
-        } else {
-          alert('Cliente criado com sucesso!');
-          setShowForm(false);
-          fetchCustomers();
+        const { data: profileData } = await supabase.from('profiles').select('contact_id').eq('id', authData.user.id).single();
+
+        if (profileData) {
+            const { error: contactError } = await supabase
+              .from('contacts')
+              .update({
+                full_name: currentCustomer.full_name,
+                phone: currentCustomer.phone,
+                cpf: currentCustomer.cpf,
+                address: currentCustomer.address,
+                number: currentCustomer.number,
+                cep: currentCustomer.cep,
+                neighborhood: currentCustomer.neighborhood,
+                complement: currentCustomer.complement
+              })
+              .eq('id', profileData.contact_id);
+            
+            if (contactError) {
+              alert('Utilizador criado, mas falha ao salvar detalhes do contato: ' + contactError.message);
+            } else {
+              alert('Cliente criado com sucesso!');
+              setShowForm(false);
+              fetchCustomers();
+            }
         }
       }
     }
@@ -141,41 +166,22 @@ export default function CustomerManagement() {
     <div className="admin-content">
       <div className="page-header">
         <h2>Gestão de Clientes</h2>
-        {!showForm && <button className="btn btn-primary" onClick={handleNewClick}>Adicionar Cliente</button>}
+        {!showForm && <button className="btn btn-primary" onClick={handleNewClick}>Novo Cliente</button>}
       </div>
       <p>Adicione, edite ou remova os clientes cadastrados.</p>
 
       {showForm && (
         <form onSubmit={handleSubmit} className="product-form">
           <h3>{isEditing ? 'Editar Cliente' : 'Novo Cliente'}</h3>
-          <div className="form-group">
-            <label>Nome Completo</label>
-            <input type="text" name="full_name" value={currentCustomer.full_name || ''} onChange={handleInputChange} required />
-          </div>
-          <div className="form-group">
-            <label>E-mail (Login)</label>
-            <input type="email" name="email" value={currentCustomer.email || ''} onChange={handleInputChange} required disabled={isEditing} />
-          </div>
-          <div className="form-group">
-            <label>Telefone</label>
-            <input type="text" name="phone" value={currentCustomer.phone || ''} onChange={handleInputChange} />
-          </div>
-           <div className="form-group">
-            <label>CPF</label>
-            <input type="text" name="cpf" value={currentCustomer.cpf || ''} onChange={handleInputChange} />
-          </div>
-          <div className="form-group">
-            <label>Morada</label>
-            <input type="text" name="address" value={currentCustomer.address || ''} onChange={handleInputChange} />
-          </div>
-           <div className="form-group">
-            <label>Número</label>
-            <input type="text" name="number" value={currentCustomer.number || ''} onChange={handleInputChange} />
-          </div>
-           <div className="form-group">
-            <label>CEP</label>
-            <input type="text" name="cep" value={currentCustomer.cep || ''} onChange={handleInputChange} />
-          </div>
+          <div className="form-group"><label>Nome Completo</label><input type="text" name="full_name" value={currentCustomer.full_name || ''} onChange={handleInputChange} required /></div>
+          <div className="form-group"><label>E-mail (Login)</label><input type="email" name="email" value={currentCustomer.email || ''} onChange={handleInputChange} required disabled={isEditing} /></div>
+          <div className="form-group"><label>Telefone</label><input type="text" name="phone" value={currentCustomer.phone || ''} onChange={handleInputChange} /></div>
+          <div className="form-group"><label>CPF</label><input type="text" name="cpf" value={currentCustomer.cpf || ''} onChange={handleInputChange} /></div>
+          <div className="form-group"><label>Morada</label><input type="text" name="address" value={currentCustomer.address || ''} onChange={handleInputChange} /></div>
+          <div className="form-group"><label>Número</label><input type="text" name="number" value={currentCustomer.number || ''} onChange={handleInputChange} /></div>
+          <div className="form-group"><label>Bairro</label><input type="text" name="neighborhood" value={currentCustomer.neighborhood || ''} onChange={handleInputChange} /></div>
+          <div className="form-group"><label>CEP</label><input type="text" name="cep" value={currentCustomer.cep || ''} onChange={handleInputChange} /></div>
+          <div className="form-group"><label>Complemento</label><input type="text" name="complement" value={currentCustomer.complement || ''} onChange={handleInputChange} /></div>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? 'A salvar...' : (isEditing ? 'Salvar' : 'Criar')}</button>
             <button type="button" className="btn btn-secondary" onClick={() => {setShowForm(false); resetForm();}}>Cancelar</button>

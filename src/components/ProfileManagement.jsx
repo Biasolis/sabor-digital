@@ -3,8 +3,9 @@ import { supabase } from '../lib/supabaseClient';
 import { validateCPF } from '../utils/cpfValidator';
 
 export default function ProfileManagement({ isOpen, onClose, session, onProfileUpdate }) {
-  const [profile, setProfile] = useState({ full_name: '', address: '', phone: '', cep: '', number: '', neighborhood: '', complement: '', cpf: '', accepts_communications: false });
+  const [contact, setContact] = useState({ full_name: '', address: '', phone: '', cep: '', number: '', neighborhood: '', complement: '', cpf: '', accepts_communications: false });
   const [loading, setLoading] = useState(false);
+  const [profile, setProfile] = useState(null);
 
   const fetchAddressFromCep = async (cep) => {
     if (cep.length !== 8) return;
@@ -13,7 +14,7 @@ export default function ProfileManagement({ isOpen, onClose, session, onProfileU
       const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
       const data = await response.json();
       if (!data.erro) {
-        setProfile(prev => ({ ...prev, address: data.logradouro, neighborhood: data.bairro, }));
+        setContact(prev => ({ ...prev, address: data.logouro, neighborhood: data.bairro, }));
       }
     } catch (error) {
       console.error("Erro ao buscar CEP:", error);
@@ -24,42 +25,63 @@ export default function ProfileManagement({ isOpen, onClose, session, onProfileU
 
   useEffect(() => {
     if (!isOpen) return;
-    const fetchProfile = async () => {
+    const fetchProfileData = async () => {
       setLoading(true);
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-      if (error) console.error("Erro ao buscar perfil:", error);
-      else if (data) setProfile(data);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*, contacts(*)')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (error) {
+        console.error("Erro ao buscar perfil:", error);
+      } else if (data) {
+        setProfile(data);
+        if (data.contacts) {
+          setContact(data.contacts);
+        }
+      }
       setLoading(false);
     };
-    fetchProfile();
+    fetchProfileData();
   }, [isOpen, session.user.id]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (type === 'checkbox') {
-        setProfile({ ...profile, [name]: checked });
-    } else {
-        const cleanedValue = name === 'cep' ? value.replace(/\D/g, '') : value;
-        setProfile({ ...profile, [name]: cleanedValue });
-        if (name === 'cep') {
-          fetchAddressFromCep(cleanedValue);
-        }
+    const newValue = type === 'checkbox' ? checked : value;
+    setContact(prev => ({ ...prev, [name]: newValue }));
+    
+    if (name === 'cep') {
+      const cleanedValue = value.replace(/\D/g, '');
+      if (cleanedValue.length === 8) {
+        fetchAddressFromCep(cleanedValue);
+      }
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateCPF(profile.cpf)) {
+    if (contact.cpf && !validateCPF(contact.cpf)) {
       alert("O CPF inserido não é válido. Por favor, verifique.");
       return;
     }
     setLoading(true);
-    const { error } = await supabase.from('profiles').update({
-      full_name: profile.full_name, address: profile.address, phone: profile.phone,
-      cep: profile.cep, number: profile.number, neighborhood: profile.neighborhood,
-      complement: profile.complement, cpf: profile.cpf,
-      accepts_communications: profile.accepts_communications
-    }).eq('id', session.user.id);
+    
+    // Os dados do formulário agora atualizam a tabela 'contacts'
+    const { error } = await supabase
+      .from('contacts')
+      .update({
+        full_name: contact.full_name,
+        address: contact.address,
+        phone: contact.phone,
+        cep: contact.cep,
+        number: contact.number,
+        neighborhood: contact.neighborhood,
+        complement: contact.complement,
+        cpf: contact.cpf,
+        accepts_communications: contact.accepts_communications
+      })
+      .eq('id', profile.contact_id); // Usa o contact_id do perfil para encontrar o registo certo
 
     if (error) {
       alert("Erro ao atualizar perfil: " + error.message);
@@ -78,23 +100,23 @@ export default function ProfileManagement({ isOpen, onClose, session, onProfileU
       <div className="cart-modal-content" style={{width: '100%', maxWidth: '700px', height: 'auto'}} onClick={(e) => e.stopPropagation()}>
         <div className="cart-header"><h2>Meu Perfil</h2><button onClick={onClose}>&times;</button></div>
         <div className="cart-body">
-          {loading && !profile.full_name ? <p>A carregar...</p> : (
+          {loading && !contact.full_name ? <p>A carregar...</p> : (
             <form onSubmit={handleSubmit} className="product-form" style={{marginTop: 0, boxShadow: 'none', padding: 0}}>
               <p style={{color: '#6b7280', marginBottom: '1rem'}}>Preencha os seus dados para podermos processar o seu pedido.</p>
               <div className="profile-form-grid">
-                <div className="form-group"><label>Nome Completo</label><input type="text" name="full_name" value={profile.full_name || ''} onChange={handleInputChange} required /></div>
-                <div className="form-group"><label>CPF</label><input type="text" name="cpf" value={profile.cpf || ''} onChange={handleInputChange} required /></div>
-                <div className="form-group"><label>Telefone</label><input type="text" name="phone" value={profile.phone || ''} onChange={handleInputChange} required /></div>
-                <div className="form-group"><label>CEP</label><input type="text" name="cep" value={profile.cep || ''} onChange={handleInputChange} maxLength="8" required /></div>
-                <div className="form-group"><label>Morada</label><input type="text" name="address" value={profile.address || ''} onChange={handleInputChange} required /></div>
-                <div className="form-group"><label>Número</label><input type="text" name="number" value={profile.number || ''} onChange={handleInputChange} required /></div>
-                <div className="form-group"><label>Bairro</label><input type="text" name="neighborhood" value={profile.neighborhood || ''} onChange={handleInputChange} required /></div>
-                <div className="form-group"><label>Complemento</label><input type="text" name="complement" value={profile.complement || ''} onChange={handleInputChange} /></div>
+                <div className="form-group"><label>Nome Completo</label><input type="text" name="full_name" value={contact.full_name || ''} onChange={handleInputChange} required /></div>
+                <div className="form-group"><label>CPF</label><input type="text" name="cpf" value={contact.cpf || ''} onChange={handleInputChange} required /></div>
+                <div className="form-group"><label>Telefone</label><input type="text" name="phone" value={contact.phone || ''} onChange={handleInputChange} required /></div>
+                <div className="form-group"><label>CEP</label><input type="text" name="cep" value={contact.cep || ''} onChange={handleInputChange} maxLength="8" required /></div>
+                <div className="form-group"><label>Morada</label><input type="text" name="address" value={contact.address || ''} onChange={handleInputChange} required /></div>
+                <div className="form-group"><label>Número</label><input type="text" name="number" value={contact.number || ''} onChange={handleInputChange} required /></div>
+                <div className="form-group"><label>Bairro</label><input type="text" name="neighborhood" value={contact.neighborhood || ''} onChange={handleInputChange} required /></div>
+                <div className="form-group"><label>Complemento</label><input type="text" name="complement" value={contact.complement || ''} onChange={handleInputChange} /></div>
               </div>
               <div className="toggle-group">
                   <label htmlFor="accepts_communications">Aceito receber promoções por e-mail e WhatsApp</label>
                   <label className="toggle-switch">
-                      <input type="checkbox" name="accepts_communications" id="accepts_communications" checked={profile.accepts_communications} onChange={handleInputChange} />
+                      <input type="checkbox" name="accepts_communications" id="accepts_communications" checked={contact.accepts_communications} onChange={handleInputChange} />
                       <span className="slider"></span>
                   </label>
               </div>

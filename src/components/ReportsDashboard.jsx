@@ -1,130 +1,162 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import OrderDetailModal from './OrderDetailModal'; // Importa o modal de detalhes do pedido
 
 export default function ReportsDashboard() {
   const [reportData, setReportData] = useState({ revenue: 0, orderCount: 0, topProducts: [] });
+  const [orders, setOrders] = useState([]); // NOVO: Estado para guardar a lista de pedidos
   const [loading, setLoading] = useState(false);
   const [period, setPeriod] = useState('day'); // 'day', 'week', 'month'
+  
+  // NOVO: Estados para controlar o modal de detalhes
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchReportData = async () => {
-      setLoading(true);
+  // Mapeamento de status para usar no relatório
+  const statusMap = {
+    pending: { text: "Pendente", class: "pending" },
+    accepted: { text: "Em Preparo", class: "accepted" },
+    ready: { text: "Pronto", class: "ready" },
+    delivered: { text: "Entregue", class: "delivered" },
+    cancelled: { text: "Cancelado", class: "cancelled" },
+  };
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+  const fetchReportData = async () => {
+    setLoading(true);
 
-      // Define o intervalo de datas com base no período
-      const today = new Date();
-      let startDate = new Date();
-      const endDate = new Date();
+    // Define o intervalo de datas com base no período
+    const today = new Date();
+    let startDate = new Date();
+    const endDate = new Date();
 
-      if (period === 'day') {
-        startDate.setHours(0, 0, 0, 0);
-      } else if (period === 'week') {
-        startDate.setDate(today.getDate() - today.getDay());
-        startDate.setHours(0, 0, 0, 0);
-      } else if (period === 'month') {
-        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-      }
+    if (period === 'day') {
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === 'week') {
+      startDate.setDate(today.getDate() - today.getDay());
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === 'month') {
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    }
 
-      // 1. Busca todos os pedidos finalizados no período
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select('id, total_price')
-        .eq('status', 'delivered')
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString());
+    // 1. Busca todos os pedidos no período, incluindo os dados dos contactos e itens
+    const { data: allOrders, error: ordersError } = await supabase
+      .from('orders')
+      .select('*, contacts(*), order_items(*, products(name))')
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString())
+      .order('created_at', { ascending: false });
 
-      if (ordersError) {
-        console.error("Erro ao buscar pedidos para o relatório:", ordersError);
-        setLoading(false);
-        return;
-      }
-
-      // 2. Calcula as métricas básicas
-      const totalRevenue = orders.reduce((sum, order) => sum + order.total_price, 0);
-      const orderCount = orders.length;
-
-      // 3. Busca os itens dos pedidos para encontrar os mais vendidos
-      const orderIds = orders.map(o => o.id);
-      let topProducts = [];
-
-      if (orderIds.length > 0) {
-        const { data: items, error: itemsError } = await supabase
-          .from('order_items')
-          .select('quantity, products (name)')
-          .in('order_id', orderIds);
-
-        if (itemsError) {
-          console.error("Erro ao buscar itens do pedido:", itemsError);
-        } else {
-          const productCount = items.reduce((acc, item) => {
-            if (item.products) { // Verifica se o produto não foi apagado
-              acc[item.products.name] = (acc[item.products.name] || 0) + item.quantity;
-            }
-            return acc;
-          }, {});
-
-          topProducts = Object.entries(productCount)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 10) // Pega os 10 mais vendidos
-            .map(([name, quantity]) => ({ name, quantity }));
-        }
-      }
-
-      setReportData({ revenue: totalRevenue, orderCount, topProducts });
+    if (ordersError) {
+      console.error("Erro ao buscar pedidos para o relatório:", ordersError);
       setLoading(false);
-    };
+      return;
+    }
+    
+    setOrders(allOrders); // Guarda a lista completa de pedidos
 
+    // 2. Filtra apenas os pedidos finalizados para os cálculos de resumo
+    const deliveredOrders = allOrders.filter(o => o.status === 'delivered');
+    const totalRevenue = deliveredOrders.reduce((sum, order) => sum + order.total_price, 0);
+    const orderCount = deliveredOrders.length;
+
+    // 3. Calcula os produtos mais vendidos a partir dos pedidos finalizados
+    const deliveredOrderItems = deliveredOrders.flatMap(o => o.order_items);
+    const productCount = deliveredOrderItems.reduce((acc, item) => {
+      if (item.products) {
+        acc[item.products.name] = (acc[item.products.name] || 0) + item.quantity;
+      }
+      return acc;
+    }, {});
+
+    const topProducts = Object.entries(productCount)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .map(([name, quantity]) => ({ name, quantity }));
+
+    setReportData({ revenue: totalRevenue, orderCount, topProducts });
+    setLoading(false);
+  };
+  
+  // O useEffect agora só tem uma dependência
+  useEffect(() => {
     fetchReportData();
   }, [period]);
 
+  const handleViewDetails = (order) => {
+    setSelectedOrder(order);
+    setIsModalOpen(true);
+  };
+
   return (
-    <div className="admin-content">
-      <div className="page-header">
-        <h2>Relatórios</h2>
-      </div>
-      <p>Analise o desempenho da sua loja.</p>
+    <>
+      {/* Adiciona o modal ao componente */}
+      <OrderDetailModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        order={selectedOrder} 
+        onStatusChange={fetchReportData} // Recarrega os dados se o status for alterado
+      />
+      <div className="admin-content">
+        <div className="page-header">
+          <h2>Relatórios</h2>
+        </div>
+        <p>Analise o desempenho da sua loja.</p>
 
-      <div className="date-filters">
-        <button onClick={() => setPeriod('day')} className={`btn ${period === 'day' ? 'btn-primary' : 'btn-secondary'}`}>Hoje</button>
-        <button onClick={() => setPeriod('week')} className={`btn ${period === 'week' ? 'btn-primary' : 'btn-secondary'}`}>Esta Semana</button>
-        <button onClick={() => setPeriod('month')} className={`btn ${period === 'month' ? 'btn-primary' : 'btn-secondary'}`}>Este Mês</button>
-      </div>
+        <div className="date-filters">
+          <button onClick={() => setPeriod('day')} className={`btn ${period === 'day' ? 'btn-primary' : 'btn-secondary'}`}>Hoje</button>
+          <button onClick={() => setPeriod('week')} className={`btn ${period === 'week' ? 'btn-primary' : 'btn-secondary'}`}>Esta Semana</button>
+          <button onClick={() => setPeriod('month')} className={`btn ${period === 'month' ? 'btn-primary' : 'btn-secondary'}`}>Este Mês</button>
+        </div>
 
-      {loading ? <p>A gerar relatório...</p> : (
-        <>
-          <div className="summary-cards">
-            <div className="summary-card">
-              <h4>Total Arrecadado</h4>
-              <p>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(reportData.revenue)}</p>
+        {loading ? <p>A gerar relatório...</p> : (
+          <>
+            <div className="summary-cards">
+              <div className="summary-card">
+                <h4>Total Arrecadado (Entregues)</h4>
+                <p>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(reportData.revenue)}</p>
+              </div>
+              <div className="summary-card">
+                <h4>Pedidos Finalizados</h4>
+                <p>{reportData.orderCount}</p>
+              </div>
             </div>
-            <div className="summary-card">
-              <h4>Pedidos Finalizados</h4>
-              <p>{reportData.orderCount}</p>
+            
+            {/* NOVO: Lista detalhada de todos os pedidos do período */}
+            <h4 style={{marginTop: '2rem'}}>Todos os Pedidos do Período</h4>
+            <div className="product-table-wrapper">
+                <table className="product-table">
+                  <thead>
+                    <tr>
+                      <th>Pedido #</th>
+                      <th>Cliente</th>
+                      <th>Total</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((order) => (
+                      <tr key={order.id}>
+                        <td>{order.id}</td>
+                        <td>{order.contacts?.full_name || order.in_person_identifier || 'N/A'}</td>
+                        <td>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_price)}</td>
+                        <td>
+                          <span className={`status-badge ${statusMap[order.status]?.class || ''}`}>
+                            {statusMap[order.status]?.text || order.status}
+                          </span>
+                        </td>
+                        <td className="actions-cell">
+                          <button onClick={() => handleViewDetails(order)}>Ver Detalhes</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
             </div>
-          </div>
-
-          <h4>Produtos Mais Pedidos</h4>
-          <table className="product-table">
-            <thead>
-              <tr>
-                <th>Produto</th>
-                <th>Quantidade Vendida</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reportData.topProducts.map((product) => (
-                <tr key={product.name}>
-                  <td>{product.name}</td>
-                  <td>{product.quantity}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {reportData.topProducts.length === 0 && <p style={{marginTop: '1rem'}}>Nenhum produto vendido no período.</p>}
-        </>
-      )}
-    </div>
+            {orders.length === 0 && <p style={{marginTop: '1rem', textAlign: 'center'}}>Nenhum pedido encontrado no período.</p>}
+          </>
+        )}
+      </div>
+    </>
   );
 }

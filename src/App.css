@@ -74,8 +74,11 @@ button { cursor: pointer; border: none; background: none; font-size: 1rem; }
 .admin-content h2 { font-size: 1.8rem; font-weight: 700; } .admin-content p { margin-top: 0.5rem; color: #4b5563; }
 
 /* --- ESTILOS GERAIS DE FORMULÁRIO E TABELA --- */
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; }
 .page-header h2 { margin: 0; }
+/* ADICIONADO: Garante que o botão no cabeçalho não ocupe 100% da largura */
+.page-header .btn { width: auto; }
+
 .btn-primary { background-color: var(--secondary-color); color: white; padding: 0.6rem 1.2rem; border-radius: 0.5rem; }
 .btn-primary:hover { background-color: var(--secondary-color-hover); }
 .product-form { background-color: white; padding: 2rem; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-top: 2rem; display: flex; flex-direction: column; gap: 1rem; }
@@ -116,7 +119,7 @@ button { cursor: pointer; border: none; background: none; font-size: 1rem; }
 /* --- ESTILOS GESTÃO DE PEDIDOS --- */
 .order-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; }
 .order-card { background-color: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 1.5rem; border-left: 5px solid; }
-.order-card.status-pending { border-color: #f59e0b; } .order-card.status-accepted { border-color: #2563eb; } .order-card.status-delivered { border-color: #16a34a; } .order-card.status-cancelled { border-color: #dc2626; }
+.order-card.status-pending { border-color: #f59e0b; } .order-card.status-accepted { border-color: #2563eb; } .order-card.status-delivered { border-color: #16a34a; } .order-card.status-cancelled { border-color: #dc2626; } .order-card.status-ready { border-color: #16a34a; }
 .order-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; } .order-card-header h3 { font-size: 1.1rem; margin: 0; } .order-card-header span { font-size: 0.9rem; color: #6b7280; }
 .order-card-customer p { margin: 0.25rem 0; color: #374151; font-size: 0.9rem; }
 .order-card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; } .order-card-total { font-size: 1.2rem; font-weight: bold; }
@@ -125,7 +128,7 @@ button { cursor: pointer; border: none; background: none; font-size: 1rem; }
 .my-orders-card { background-color: white; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid #e5e7eb; }
 .my-orders-header { display: flex; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1rem; }
 .status-badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; color: white; }
-.status-badge.pending { background-color: var(--primary-color); } .status-badge.accepted { background-color: #2563eb; } .status-badge.delivered { background-color: #16a34a; } .status-badge.cancelled { background-color: #dc2626; }
+.status-badge.pending { background-color: var(--primary-color); } .status-badge.accepted { background-color: #2563eb; } .status-badge.ready { background-color: #16a34a; } .status-badge.delivered { background-color: #16a34a; } .status-badge.cancelled { background-color: #dc2626; }
 
 /* --- ESTILOS GERAIS --- */
 .category-filters { display: flex; gap: 0.75rem; margin-bottom: 2rem; flex-wrap: wrap; }
@@ -155,7 +158,7 @@ button { cursor: pointer; border: none; background: none; font-size: 1rem; }
 .order-detail-section p { margin: 0.5rem 0; }
 .order-detail-items-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
 .order-detail-items-table th, .order-detail-items-table td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e5e7eb; }
-.profile-form-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.profile-form-grid { display: grid; grid-template-columns: 1fr; }
 @media (min-width: 640px) { .profile-form-grid { grid-template-columns: 1fr 1fr; } }
 .pos-view { display: flex; height: 100vh; width: 100%; }
 .pos-menu { flex: 2; display: flex; flex-direction: column; padding: 1.5rem; overflow-y: hidden; }
@@ -198,8 +201,6 @@ input:checked + .slider:before { transform: translateX(22px); }
 .btn-ready { width: 100%; padding: 0.75rem; background-color: #16a34a; color: white; border-radius: 0.5rem; font-weight: 600; margin-top: 1rem; }
 .btn-ready:hover { background-color: #15803d; }
 .loading-message, .no-orders-message { text-align: center; font-size: 1.2rem; color: #6b7280; padding: 4rem 0; }
-.status-badge.ready { background-color: #16a34a; }
-.order-card.status-ready { border-color: #16a34a; }
 
 /* --- ESTILOS GESTÃO WHATSAPP --- */
 .whatsapp-status-card {

@@ -8,13 +8,14 @@ export default function WhatsAppSettings() {
   useEffect(() => {
     const fetchSettings = async () => {
       setLoading(true);
+      // ATUALIZADO: Trocado .single() por .maybeSingle()
       const { data, error } = await supabase
         .from('whatsapp_settings')
         .select('*')
         .eq('id', 1)
-        .single();
+        .maybeSingle();
       
-      if (error && error.code !== 'PGRST116') { // PGRST116 = row not found
+      if (error) {
         console.error('Erro ao buscar configurações do WhatsApp:', error);
       } else if (data) {
         setSettings(data);
@@ -62,7 +63,6 @@ export default function WhatsAppSettings() {
           </label>
         </div>
 
-        {/* --- NOVA CONFIGURAÇÃO --- */}
         <div className="toggle-group">
           <label htmlFor="process_group_messages">
             <strong>Processar mensagens de grupos</strong>
