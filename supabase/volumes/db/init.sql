@@ -261,3 +261,19 @@ INSERT INTO public.whatsapp_settings (id, send_order_updates, process_group_mess
 SET 
     send_order_updates = EXCLUDED.send_order_updates,
     process_group_messages = EXCLUDED.process_group_messages;
+
+
+-- ====================================================================================
+-- 9. VIEW PARA JUNTAR DADOS DE CHATS E PERFIS
+-- ====================================================================================
+CREATE OR REPLACE VIEW public.chats_with_profile AS
+SELECT
+    wc.id,
+    COALESCE(p.full_name, wc.name) AS display_name,
+    wc.last_message_timestamp,
+    wc.status,
+    wc.created_at
+FROM
+    public.whatsapp_chats wc
+LEFT JOIN
+    public.profiles p ON (regexp_replace(wc.id, '[^0-9]', '', 'g')) = p.phone;

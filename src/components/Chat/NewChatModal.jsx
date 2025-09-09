@@ -37,11 +37,12 @@ export default function NewChatModal({ onClose, onSelectChat }) {
         const cleanedPhone = customer.phone.replace(/\D/g, '');
         const chatId = `${cleanedPhone}@s.whatsapp.net`;
         
-        // Garante que a conversa existe e está aberta
+        // Garante que a conversa existe, está aberta e tem um timestamp para ordenação
         await supabase.from('whatsapp_chats').upsert({ 
             id: chatId, 
             name: customer.full_name, 
-            status: 'open' 
+            status: 'open',
+            last_message_timestamp: new Date().toISOString()
         });
 
         onSelectChat({ id: chatId, name: customer.full_name });
@@ -56,11 +57,16 @@ export default function NewChatModal({ onClose, onSelectChat }) {
             return;
         }
         const chatId = `${cleanedNumber}@s.whatsapp.net`;
-        await supabase.from('whatsapp_chats').upsert({ id: chatId, name: newNumber, status: 'open' });
+        // Garante que a conversa existe, está aberta e tem um timestamp para ordenação
+        await supabase.from('whatsapp_chats').upsert({ 
+            id: chatId, 
+            name: newNumber, 
+            status: 'open',
+            last_message_timestamp: new Date().toISOString()
+        });
         onSelectChat({ id: chatId, name: newNumber });
         onClose();
     };
-
 
     return (
         <div className="cart-modal-overlay modal-overlay-centered" onClick={onClose}>

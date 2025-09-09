@@ -1,14 +1,15 @@
 .chat-container {
   display: flex;
-  height: calc(100vh - 12rem); /* Altura ajustável */
-  background-color: #e5ddd5;
+  height: calc(100vh - 12rem);
+  background-color: #f3f4f6;
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+  position: relative; /* Necessário para o posicionamento do painel de contato */
 }
 
 .chat-list-pane {
-  width: 30%;
+  width: 25%;
   min-width: 280px;
   background-color: white;
   border-right: 1px solid #d1d5db;
@@ -25,93 +26,47 @@
   align-items: center;
 }
 
-.chat-list-header h4 {
-  margin: 0;
-  font-size: 1.2rem;
-}
+.chat-list-header h4 { margin: 0; font-size: 1.2rem; }
 
-.new-chat-btn {
-  background-color: var(--primary-color);
-  color: white;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  font-size: 1.5rem;
-  line-height: 32px;
-  text-align: center;
+.btn-new-chat {
+  padding: 0.5rem 1.2rem; border-radius: 9999px; background-color: var(--primary-color);
+  color: white; font-weight: 600; font-size: 0.9rem;
 }
+.btn-new-chat:hover { background-color: var(--primary-color-hover); }
 
-.chat-list-tabs {
-  display: flex;
-  border-bottom: 1px solid #e5e7eb;
-}
-
+.chat-list-tabs { display: flex; border-bottom: 1px solid #e5e7eb; }
 .chat-list-tabs button {
-  flex: 1;
-  padding: 0.75rem;
-  font-weight: 600;
-  color: #6b7280;
+  flex: 1; padding: 0.75rem; font-weight: 600; color: #6b7280;
   border-bottom: 2px solid transparent;
 }
+.chat-list-tabs button.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
 
-.chat-list-tabs button.active {
-  color: var(--primary-color);
-  border-bottom-color: var(--primary-color);
-}
-
-.chat-list {
-  overflow-y: auto;
-  flex-grow: 1;
-}
+.chat-list { overflow-y: auto; flex-grow: 1; }
 
 .chat-list-item {
-  padding: 1rem 1.5rem;
-  cursor: pointer;
-  border-bottom: 1px solid #f3f4f6;
-  transition: background-color 0.2s;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  padding: 0.75rem 1.5rem; cursor: pointer; border-bottom: 1px solid #f3f4f6;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.chat-list-item:hover { background-color: #f9fafb; }
+.chat-list-item.active { background-color: #e5e7eb; }
+
+.chat-avatar {
+  width: 40px; height: 40px; border-radius: 50%; background-color: var(--primary-color);
+  color: white; display: flex; align-items: center; justify-content: center;
+  font-weight: bold; font-size: 1.2rem; margin-right: 1rem; flex-shrink: 0;
 }
 
-.chat-list-item:hover {
-  background-color: #f9fafb;
-}
-
-.chat-list-item.active {
-  background-color: #e5e7eb;
-}
-
-.chat-item-details {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-item-name {
-  font-weight: 600;
-  margin: 0;
-}
+.chat-item-details { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-grow: 1; }
+.chat-item-name { font-weight: 600; margin: 0; }
 
 .archive-btn {
-  background: #f3f4f6;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  line-height: 28px;
-  text-align: center;
-  flex-shrink: 0;
-  margin-left: 1rem;
+  background-color: #e5e7eb; color: #374151; padding: 0.25rem 0.75rem;
+  border-radius: 9999px; font-size: 0.75rem; font-weight: 500; margin-left: 1rem;
+  white-space: nowrap; flex-shrink: 0;
 }
-.archive-btn:hover {
-  background: #e5e7eb;
-}
+.archive-btn:hover { background-color: #d1d5db; }
 
-.chat-list-empty {
-  padding: 2rem 1rem;
-  text-align: center;
-  color: #6b7280;
-}
+.chat-list-empty { padding: 2rem 1rem; text-align: center; color: #6b7280; }
 
 
 /* Message View */
@@ -119,115 +74,67 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  background-color: #e5ddd5;
 }
-
-.message-view-pane.placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #6b7280;
-  font-size: 1.2rem;
-}
-
+.message-view-pane.placeholder { justify-content: center; align-items: center; color: #6b7280; font-size: 1.2rem; }
 .message-view-header {
-  background-color: #f3f4f6;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #d1d5db;
-  flex-shrink: 0;
+  background-color: #f0f2f5; padding: 1rem 1.5rem; border-bottom: 1px solid #d1d5db; flex-shrink: 0;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.message-view-header h5 { margin: 0; font-size: 1.1rem; }
+.btn-contact-info { font-weight: 600; color: var(--secondary-color); font-size: 0.9rem; }
+
+.message-list { flex-grow: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.message-bubble { padding: 0.75rem 1rem; border-radius: 1rem; max-width: 70%; width: fit-content; }
+.message-bubble p { margin: 0; white-space: pre-wrap; }
+.message-bubble.received { background-color: white; align-self: flex-start; border-top-left-radius: 0; }
+.message-bubble.sent { background-color: #dcf8c6; align-self: flex-end; border-top-right-radius: 0; }
+.timestamp { font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem; text-align: right; display: block; }
+.message-input-form { display: flex; padding: 1rem; background-color: #f0f2f5; border-top: 1px solid #d1d5db; }
+.message-input-form input { flex-grow: 1; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 9999px; margin-right: 1rem; }
+.message-input-form button {
+  padding: 0.75rem 1.5rem; border-radius: 9999px; background-color: var(--primary-color);
+  color: white; font-weight: 600;
 }
 
-.message-view-header h5 {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.message-list {
-  flex-grow: 1;
-  overflow-y: auto;
-  padding: 1.5rem;
+/* Contact Info Pane */
+.contact-info-pane {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 30%;
+  min-width: 320px;
+  max-width: 400px;
+  background-color: white;
+  border-left: 1px solid #d1d5db;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  box-shadow: -4px 0 10px rgba(0,0,0,0.1);
+  z-index: 10;
+}
+.contact-info-header {
+  padding: 1rem 1.5rem; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.contact-info-header h4 { margin: 0; }
+.contact-info-header .close-btn { font-size: 1.5rem; color: #6b7280; }
+
+.contact-info-body { flex-grow: 1; overflow-y: auto; padding: 1.5rem; }
+.contact-details p { margin: 0 0 1rem; }
+.contact-info-body .form-group { margin-bottom: 1rem; }
+.contact-info-body .form-actions { display: flex; gap: 1rem; margin-top: 1.5rem; }
+.btn-edit-contact {
+  width: 100%; padding: 0.75rem; border-radius: 0.5rem;
+  background-color: var(--secondary-color); color: white;
 }
 
-.message-bubble {
-  padding: 0.75rem 1rem;
-  border-radius: 1rem;
-  max-width: 70%;
-  width: fit-content;
-}
-
-.message-bubble p {
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.message-bubble.received {
-  background-color: white;
-  align-self: flex-start;
-  border-top-left-radius: 0;
-}
-
-.message-bubble.sent {
-  background-color: #dcf8c6;
-  align-self: flex-end;
-  border-top-right-radius: 0;
-}
-
-.timestamp {
-  font-size: 0.75rem;
-  color: #6b7280;
-  margin-top: 0.25rem;
-  text-align: right;
-  display: block;
-}
-
-.message-input-form {
-  display: flex;
-  padding: 1rem;
-  background-color: #f3f4f6;
-  border-top: 1px solid #d1d5db;
-}
-
-.message-input-form input {
-  flex-grow: 1;
-  padding: 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 9999px;
-  margin-right: 1rem;
-}
-
-.message-input-form button {
-  padding: 0.75rem 1.5rem;
-  border-radius: 9999px;
-  background-color: var(--primary-color);
-  color: white;
-  font-weight: 600;
-}
-
-/* New Chat Modal Specifics */
+/* New Chat Modal */
 .customer-search-results {
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
+  max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb;
+  border-radius: 0.5rem; margin-top: 0.5rem;
 }
-
-.customer-search-item {
-  padding: 0.75rem 1rem;
-  cursor: pointer;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.customer-search-item:last-child {
-  border-bottom: none;
-}
-
-.customer-search-item:hover {
-  background-color: #f9fafb;
-}
-
-.customer-search-item p {
-  margin: 0;
-  color: #374151;
-}
+.customer-search-item { padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid #e5e7eb; }
+.customer-search-item:last-child { border-bottom: none; }
+.customer-search-item:hover { background-color: #f9fafb; }
+.customer-search-item p { margin: 0; color: #374151; }

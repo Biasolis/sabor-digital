@@ -52,7 +52,7 @@ const AdminDashboard = ({ storeName, session, logoUrl }) => {
         switch(activeTab) { 
             case 'orders': return <OrderManagement />; 
             case 'cozinha': return <KitchenDisplay session={session} />;
-            case 'whatsapp': return <WhatsAppDashboard />;
+            case 'whatsapp': return <WhatsAppDashboard session={session} />;
             case 'menu': return <MenuDashboard />; 
             case 'promotions': return <PromotionManagement />; 
             case 'reports': return <ReportsDashboard />; 
@@ -257,17 +257,23 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
-  const fetchProfile = useCallback(async () => {
-    if (!session) { setProfile(null); return; }
-    const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+  const fetchProfile = useCallback(async (currentSession) => {
+    if (!currentSession) { 
+      setProfile(null); 
+      return; 
+    }
+    const { data } = await supabase.from('profiles').select('*').eq('id', currentSession.user.id).single();
     setProfile(data);
-  }, [session]);
+  }, []);
 
   useEffect(() => {
     const initializeApp = async () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
+      if (session) {
+        await fetchProfile(session);
+      }
       
       const { data: settingsData } = await supabase.from('store_settings').select('*').eq('id', 1).single();
       const currentSettings = settingsData || { store_name: "Sabor Digital", primary_color: '#f59e0b', secondary_color: '#4f46e5' };
@@ -280,19 +286,20 @@ export default function App() {
         document.documentElement.style.setProperty('--secondary-color-hover', `${settingsData.secondary_color}dd`);
       }
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
         setSession(newSession);
+        if (newSession) {
+          await fetchProfile(newSession);
+        } else {
+          setProfile(null);
+        }
       });
       
       setLoading(false);
       return () => subscription.unsubscribe();
     };
     initializeApp();
-  }, []);
-
-  useEffect(() => {
-    fetchProfile();
-  }, [session, fetchProfile]);
+  }, [fetchProfile]);
 
   const storeName = storeSettings?.store_name || "Sabor Digital";
   const logoUrl = storeSettings?.logo_url;
@@ -312,7 +319,7 @@ export default function App() {
       return (
         <>
           <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} storeName={storeName} />
-          <MainView session={session} profile={profile} storeName={storeName} logoUrl={logoUrl} storeSettings={storeSettings} setShowAuthModal={setShowAuthModal} onProfileUpdate={fetchProfile} />
+          <MainView session={session} profile={profile} storeName={storeName} logoUrl={logoUrl} storeSettings={storeSettings} setShowAuthModal={setShowAuthModal} onProfileUpdate={() => fetchProfile(session)} />
         </>
       );
   }

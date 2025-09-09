@@ -35,7 +35,6 @@ const authFolder = 'auth_info_baileys';
 
 // --- Funções Auxiliares do Supabase ---
 const upsertChat = async (chat) => {
-  // Ao receber uma nova mensagem, a conversa deve ser sempre reaberta.
   const chatData = { ...chat, status: 'open' };
   const { data, error } = await supabase
     .from('whatsapp_chats')
@@ -160,19 +159,58 @@ async function connectToWhatsApp() {
       .single();
 
     for (const msg of m.messages) {
-      if (!msg.message || msg.key.remoteJid === 'status@broadcast') continue;
-
       const chatId = msg.key.remoteJid;
-      const isGroup = chatId.endsWith('@g.us');
+      
+      if (!msg.message || chatId.endsWith('@broadcast') || chatId.endsWith('@newsletter')) {
+        console.log(`Mensagem de broadcast/newsletter (${chatId}) ignorada.`);
+        continue;
+      }
 
+      const isGroup = chatId.endsWith('@g.us');
       if (isGroup && !settings?.process_group_messages) {
         console.log(`Mensagem de grupo (${chatId}) ignorada conforme configuração.`);
         continue;
       }
 
+      // --- NOVO: Lógica para criar cliente automaticamente ---
+      if (!msg.key.fromMe && !isGroup) {
+        const phoneNumber = chatId.split('@')[0];
+        const { data: existingProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('phone', phoneNumber)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error(`Erro ao verificar perfil para ${phoneNumber}:`, profileError.message);
+        } else if (!existingProfile) {
+          console.log(`Perfil não encontrado para ${phoneNumber}. Criando novo cliente...`);
+          const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+            email: `${phoneNumber}@internal.sabordigital.app`,
+            password: Math.random().toString(36).slice(-12),
+            email_confirm: true,
+            user_metadata: { full_name: msg.pushName || phoneNumber, role: 'customer' }
+          });
+
+          if (authError) {
+            console.error(`Erro ao criar utilizador de autenticação para ${phoneNumber}:`, authError.message);
+          } else {
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ phone: phoneNumber })
+              .eq('id', authData.user.id);
+            if (updateError) {
+              console.error(`Erro ao atualizar perfil com telefone para ${phoneNumber}:`, updateError.message);
+            } else {
+              console.log(`Perfil para ${phoneNumber} criado com sucesso.`);
+            }
+          }
+        }
+      }
+      // --- FIM DO NOVO BLOCO ---
+
       const senderId = msg.key.fromMe ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : msg.key.participant || msg.key.remoteJid;
       const messageTimestamp = new Date(Number(msg.messageTimestamp) * 1000);
-
       await upsertChat({ id: chatId, name: msg.pushName || chatId.split('@')[0], last_message_timestamp: messageTimestamp });
 
       let message_body = '';

@@ -1,72 +1,87 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import ChatList from './Chat/ChatList';
 import MessageView from './Chat/MessageView';
 import NewChatModal from './Chat/NewChatModal';
+import ContactInfo from './Chat/ContactInfo';
 import './Chat/Chat.css';
 
-export default function Chat() {
+export default function Chat({ session }) {
   const [allChats, setAllChats] = useState([]);
+  const [visibleChats, setVisibleChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedChat, setSelectedChat] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [isContactInfoOpen, setIsContactInfoOpen] = useState(false);
 
-  const fetchChats = async () => {
+  const fetchChats = useCallback(async () => {
+    setLoading(true);
+    // Alterado para buscar da nova VIEW
     const { data, error } = await supabase
-      .from('whatsapp_chats')
+      .from('chats_with_profile')
       .select('*')
       .order('last_message_timestamp', { ascending: false, nullsFirst: false });
 
     if (error) {
       console.error('Erro ao buscar chats:', error);
+      setAllChats([]);
     } else {
       setAllChats(data || []);
     }
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchChats();
-
-    const channel = supabase.channel('whatsapp_chats_and_messages')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_chats' }, fetchChats)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_messages' }, fetchChats)
+    if (session) {
+      fetchChats();
+    }
+    // A subscrição continua na tabela original, pois a view não suporta real-time
+    const channel = supabase.channel('realtime:whatsapp_chats')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_chats' },
+        (payload) => {
+          fetchChats();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [session, fetchChats]);
+
+  useEffect(() => {
+    const filtered = allChats.filter(chat => {
+      const isArchived = chat.status === 'archived';
+      return showArchived ? isArchived : !isArchived;
+    });
+    setVisibleChats(filtered);
+  }, [allChats, showArchived]);
+
+  useEffect(() => {
+    setIsContactInfoOpen(false);
+  }, [selectedChat]);
 
   const handleArchiveChat = async (chatId) => {
     const statusToSet = showArchived ? 'open' : 'archived';
-    const { error } = await supabase
-      .from('whatsapp_chats')
-      .update({ status: statusToSet })
-      .eq('id', chatId);
-
+    const { error } = await supabase.from('whatsapp_chats').update({ status: statusToSet }).eq('id', chatId);
     if (error) {
       alert(`Erro ao ${showArchived ? 'desarquivar' : 'arquivar'} a conversa.`);
-      console.error('Erro ao arquivar chat:', error);
     } else {
-      if (selectedChat?.id === chatId) {
+      if(selectedChat?.id === chatId) {
         setSelectedChat(null);
       }
     }
   };
-
-  const visibleChats = allChats.filter(chat => 
-    showArchived ? chat.status === 'archived' : chat.status === 'open'
-  );
-
+  
   return (
     <div className="chat-container">
       {isNewChatModalOpen && <NewChatModal 
         onClose={() => setIsNewChatModalOpen(false)} 
         onSelectChat={(chat) => {
-          setShowArchived(false); // Garante que a vista de chats abertos está ativa
+          setShowArchived(false);
           setSelectedChat(chat);
+          setIsNewChatModalOpen(false);
         }} 
       />}
 
@@ -75,14 +90,26 @@ export default function Chat() {
         selectedChatId={selectedChat?.id}
         onSelectChat={setSelectedChat}
         loading={loading}
-        onArchiveToggle={setShowArchived}
+        onArchiveToggle={(isArchived) => {
+          setShowArchived(isArchived);
+          setSelectedChat(null);
+        }}
         showArchived={showArchived}
         onNewChat={() => setIsNewChatModalOpen(true)}
         onArchiveChat={handleArchiveChat}
       />
       <MessageView 
+        key={selectedChat ? selectedChat.id : 'placeholder'}
         chat={selectedChat}
+        onToggleContactInfo={() => setIsContactInfoOpen(!isContactInfoOpen)}
       />
+      {isContactInfoOpen && (
+        <ContactInfo 
+          key={selectedChat ? `info-${selectedChat.id}`: 'info-placeholder'}
+          chat={selectedChat}
+          onClose={() => setIsContactInfoOpen(false)}
+        />
+      )}
     </div>
   );
 }

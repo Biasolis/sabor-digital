@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 
-const MessageView = ({ chat }) => {
+const MessageView = ({ chat, onToggleContactInfo }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -12,7 +12,7 @@ const MessageView = ({ chat }) => {
   };
 
   useEffect(() => {
-    if (!chat) {
+    if (!chat?.id) {
       setMessages([]);
       return;
     }
@@ -25,14 +25,14 @@ const MessageView = ({ chat }) => {
         .order('timestamp', { ascending: true });
 
       if (error) console.error("Erro ao buscar mensagens:", error);
-      else setMessages(data);
+      else setMessages(data || []);
     };
 
     fetchMessages();
   }, [chat]);
 
   useEffect(() => {
-    if (!chat) return;
+    if (!chat?.id) return;
 
     const channel = supabase.channel(`whatsapp_messages_${chat.id}`)
       .on('postgres_changes', { 
@@ -40,19 +40,17 @@ const MessageView = ({ chat }) => {
         schema: 'public', 
         table: 'whatsapp_messages',
         filter: `chat_id=eq.${chat.id}`
-      }, (payload) => {
-        setMessages(currentMessages => {
-          if (currentMessages.find(msg => msg.id === payload.new.id)) {
-            return currentMessages;
-          }
-          return [...currentMessages, payload.new];
-        });
-      })
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBE_FAILED') {
-          console.error(`Falha ao se inscrever no canal de mensagens para ${chat.id}: `, err);
+      }, 
+        (payload) => {
+          setMessages(currentMessages => {
+            if (currentMessages.find(msg => msg.id === payload.new.id)) {
+              return currentMessages;
+            }
+            return [...currentMessages, payload.new];
+          });
         }
-      });
+      )
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -98,6 +96,11 @@ const MessageView = ({ chat }) => {
     <main className="message-view-pane">
       <header className="message-view-header">
         <h5>{chat.name}</h5>
+        {!chat.id.includes('@g.us') && (
+            <button className="btn-contact-info" onClick={onToggleContactInfo}>
+                Info
+            </button>
+        )}
       </header>
       <div className="message-list">
         {messages.map(msg => (

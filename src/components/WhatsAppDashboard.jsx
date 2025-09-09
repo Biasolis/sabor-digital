@@ -3,7 +3,7 @@ import Connection from './Connection';
 import Chat from './Chat';
 import WhatsAppSettings from './WhatsAppSettings';
 
-export default function WhatsAppDashboard() {
+export default function WhatsAppDashboard({ session }) {
     const [activeTab, setActiveTab] = useState('connection');
 
     return (
@@ -32,9 +32,16 @@ export default function WhatsAppDashboard() {
                 </button>
             </div>
 
-            {activeTab === 'connection' && <Connection />}
-            {activeTab === 'chat' && <Chat />}
-            {activeTab === 'settings' && <WhatsAppSettings />}
+            {/* A lógica de renderização foi alterada para manter os componentes montados */}
+            <div style={{ display: activeTab === 'connection' ? 'block' : 'none' }}>
+                <Connection />
+            </div>
+            <div style={{ display: activeTab === 'chat' ? 'block' : 'none' }}>
+                <Chat session={session} />
+            </div>
+            <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
+                <WhatsAppSettings />
+            </div>
         </div>
     );
 }

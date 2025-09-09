@@ -53,7 +53,12 @@ export default function CustomerManagement() {
 
   const handleDelete = async (customer) => {
     if (window.confirm(`Tem a certeza que deseja apagar o cliente ${customer.full_name}? Esta ação não pode ser desfeita e irá remover o seu login.`)) {
-      const { error } = await supabase.auth.admin.deleteUser(customer.id);
+      
+      // Alterado para chamar a Edge Function segura
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { user_id: customer.id },
+      });
+
       if (error) {
         alert('Erro ao apagar cliente: ' + error.message);
       } else {
@@ -68,7 +73,6 @@ export default function CustomerManagement() {
     setLoading(true);
 
     if (isEditing) {
-      // Apenas atualiza o perfil, pois não se deve alterar o e-mail (login)
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -89,21 +93,26 @@ export default function CustomerManagement() {
         fetchCustomers();
       }
     } else {
-      // Cria um novo utilizador de autenticação e o trigger criará o perfil
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      const { data: { session: adminSession } } = await supabase.auth.getSession();
+
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: currentCustomer.email,
-        password: Math.random().toString(36).slice(-8), // Senha temporária
-        email_confirm: true,
-        user_metadata: {
-          full_name: currentCustomer.full_name,
-          role: 'customer'
+        password: Math.random().toString(36).slice(-8),
+        options: {
+          data: {
+            full_name: currentCustomer.full_name,
+            role: 'customer'
+          }
         }
       });
       
+      if (adminSession) {
+        await supabase.auth.setSession(adminSession);
+      }
+      
       if (authError) {
         alert('Erro ao criar o utilizador: ' + authError.message);
-      } else {
-        // Atualiza o perfil recém-criado com os dados adicionais
+      } else if (authData.user){
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -118,7 +127,7 @@ export default function CustomerManagement() {
         if (profileError) {
           alert('Utilizador criado, mas falha ao salvar detalhes: ' + profileError.message);
         } else {
-          alert('Cliente criado com sucesso! Um e-mail para definição de senha foi enviado.');
+          alert('Cliente criado com sucesso!');
           setShowForm(false);
           fetchCustomers();
         }
@@ -168,8 +177,8 @@ export default function CustomerManagement() {
             <input type="text" name="cep" value={currentCustomer.cep || ''} onChange={handleInputChange} />
           </div>
           <div className="form-actions">
-            <button type="submit" className="btn btn-primary" disabled={loading}>{isEditing ? 'Salvar' : 'Criar'}</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? 'A salvar...' : (isEditing ? 'Salvar' : 'Criar')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => {setShowForm(false); resetForm();}}>Cancelar</button>
           </div>
         </form>
       )}
