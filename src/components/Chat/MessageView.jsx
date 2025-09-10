@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 
+const backendUrl = import.meta.env.VITE_WHATSAPP_BACKEND_URL || 'http://localhost:3001';
+
+const MediaMessage = ({ message }) => {
+  if (!message.media_url || !message.media_mime_type) return null;
+  if (message.media_mime_type.startsWith('image/')) return <img src={message.media_url} alt={message.message_body || 'Imagem'} style={{ maxWidth: '300px', borderRadius: '0.75rem', marginTop: '0.5rem' }} />;
+  if (message.media_mime_type.startsWith('video/')) return <video src={message.media_url} controls style={{ maxWidth: '300px', borderRadius: '0.75rem', marginTop: '0.5rem' }} />;
+  if (message.media_mime_type.startsWith('audio/')) return <audio src={message.media_url} controls style={{ marginTop: '0.5rem' }} />;
+  return null;
+};
+
 const MessageView = ({ chat, onToggleContactInfo }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -18,14 +28,27 @@ const MessageView = ({ chat, onToggleContactInfo }) => {
     }
 
     const fetchMessages = async () => {
-      const { data, error } = await supabase
-        .from('whatsapp_messages')
-        .select('*')
-        .eq('chat_id', chat.id)
-        .order('timestamp', { ascending: true });
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Sessão não encontrada. Por favor, faça login novamente.");
 
-      if (error) console.error("Erro ao buscar mensagens:", error);
-      else setMessages(data || []);
+        const response = await fetch(`${backendUrl}/messages/${chat.id}`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Falha ao buscar mensagens.');
+        }
+
+        const data = await response.json();
+        setMessages(data || []);
+      } catch (error) {
+        console.error("Erro ao buscar mensagens via backend:", error);
+        alert(error.message);
+      }
     };
 
     fetchMessages();
@@ -43,10 +66,11 @@ const MessageView = ({ chat, onToggleContactInfo }) => {
       }, 
         (payload) => {
           setMessages(currentMessages => {
-            if (currentMessages.find(msg => msg.id === payload.new.id)) {
-              return currentMessages;
+            const filtered = currentMessages.filter(msg => !msg.id.startsWith('temp_'));
+            if (filtered.find(msg => msg.id === payload.new.id)) {
+              return filtered;
             }
-            return [...currentMessages, payload.new];
+            return [...filtered, payload.new];
           });
         }
       )
@@ -65,24 +89,42 @@ const MessageView = ({ chat, onToggleContactInfo }) => {
 
     setSending(true);
     const number = chat.id.split('@')[0];
+    const originalMessage = newMessage;
+    setNewMessage('');
     
+    const optimisticMessage = {
+        id: `temp_${Date.now()}`,
+        chat_id: chat.id,
+        sent_by_us: true,
+        message_body: originalMessage,
+        timestamp: new Date().toISOString(),
+        media_url: null,
+        media_mime_type: null
+    };
+    setMessages(current => [...current, optimisticMessage]);
+
     try {
-      const response = await fetch('http://localhost:3001/send-message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ number, message: newMessage }),
-      });
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Utilizador não autenticado.");
+
+        const response = await fetch(`${backendUrl}/send-message`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({ number, message: originalMessage }),
+        });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Falha ao enviar a mensagem.');
       }
       
-      setNewMessage('');
-
     } catch (error) {
       console.error(error);
       alert(error.message);
+      setMessages(current => current.filter(msg => msg.id !== optimisticMessage.id));
     } finally {
       setSending(false);
     }
@@ -95,7 +137,7 @@ const MessageView = ({ chat, onToggleContactInfo }) => {
   return (
     <main className="message-view-pane">
       <header className="message-view-header">
-        <h5>{chat.name}</h5>
+        <h5>{chat.display_name || chat.name}</h5>
         {!chat.id.includes('@g.us') && (
             <button className="btn-contact-info" onClick={onToggleContactInfo}>
                 Info
@@ -105,7 +147,8 @@ const MessageView = ({ chat, onToggleContactInfo }) => {
       <div className="message-list">
         {messages.map(msg => (
           <div key={msg.id} className={`message-bubble ${msg.sent_by_us ? 'sent' : 'received'}`}>
-            <p>{msg.message_body}</p>
+            {msg.message_body && <p>{msg.message_body}</p>}
+            <MediaMessage message={msg} />
             <span className="timestamp">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
         ))}

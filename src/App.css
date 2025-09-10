@@ -275,3 +275,26 @@ input:checked + .slider:before { transform: translateX(22px); }
   padding-top: 1.5rem;
   border-top: 1px solid #e5e7eb;
 }
+
+/* --- ESTILOS ADICIONAIS PARA O STATUS DA LOJA --- */
+.customer-header .logo-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.store-status-indicator {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+}
+
+.store-status-indicator.open {
+  background-color: #16a34a; /* Verde */
+}
+
+.store-status-indicator.closed {
+  background-color: #dc2626; /* Vermelho */
+}

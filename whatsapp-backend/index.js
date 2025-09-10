@@ -1,5 +1,5 @@
 import { Boom } from '@hapi/boom';
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, getContentType, downloadMediaMessage } from '@whiskeysockets/baileys';
 import express from 'express';
 import { Server } from 'socket.io';
 import http from 'http';
@@ -8,22 +8,24 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import fs from 'fs';
+import P from 'pino';
+import fileUpload from 'express-fileupload';
 
 dotenv.config();
 
 // --- Configuração do Supabase ---
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Chave de Admin
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('Supabase URL and Service Key are required. Make sure you have a .env file in the whatsapp-backend directory.');
 }
-// Este cliente Supabase tem privilégios de administrador
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(fileUpload());
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
@@ -33,6 +35,7 @@ let sock;
 let qrCodeData;
 let connectionStatus = 'Desconectado';
 const authFolder = 'auth_info_baileys';
+const logger = P({ level: 'silent' });
 
 // --- Funções Auxiliares do Supabase ---
 const upsertChat = async (chat) => {
@@ -107,11 +110,15 @@ async function connectToWhatsApp() {
   io.emit('status', { status: connectionStatus });
   
   const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+  const { version, isLatest } = await fetchLatestBaileysVersion();
+  console.log(`A usar Baileys v${version.join('.')}, é a mais recente: ${isLatest}`);
 
   sock = makeWASocket({
+    version,
     auth: state,
     printQRInTerminal: true,
     browser: ["Sabor Digital", "Chrome", "1.0.0"],
+    logger,
   });
 
   sock.ev.on('connection.update', (update) => {
@@ -152,66 +159,81 @@ async function connectToWhatsApp() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('messages.upsert', async (m) => {
-    const { data: settings } = await supabase
-      .from('whatsapp_settings')
-      .select('process_group_messages')
-      .eq('id', 1)
-      .single();
+  sock.ev.on('chats.upsert', async (chats) => {
+    for (const chat of chats) {
+      if (chat.id && !chat.id.endsWith('@g.us')) {
+        try {
+          const picUrl = await sock.profilePictureUrl(chat.id, 'image');
+          await supabase.from('whatsapp_chats').upsert({ id: chat.id, profile_picture_url: picUrl }, { onConflict: 'id' });
+        } catch (e) {
+          // Silencia o erro
+        }
+      }
+    }
+  });
 
+  sock.ev.on('messages.upsert', async (m) => {
     for (const msg of m.messages) {
       const chatId = msg.key.remoteJid;
       
-      if (!msg.message || chatId.endsWith('@broadcast') || chatId.endsWith('@newsletter')) {
-        console.log(`Mensagem de broadcast/newsletter (${chatId}) ignorada.`);
+      if (!msg.message || !chatId || chatId === 'status@broadcast' || chatId.endsWith('@newsletter')) {
         continue;
       }
 
+      const { data: settings } = await supabase.from('whatsapp_settings').select('process_group_messages').eq('id', 1).single();
       const isGroup = chatId.endsWith('@g.us');
       if (isGroup && !settings?.process_group_messages) {
-        console.log(`Mensagem de grupo (${chatId}) ignorada conforme configuração.`);
         continue;
       }
 
       if (!msg.key.fromMe && !isGroup) {
         const phoneNumber = chatId.split('@')[0];
-        const { data: existingContact, error: contactError } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('phone', phoneNumber)
-          .maybeSingle();
-
-        if (contactError) {
-          console.error(`Erro ao verificar contato para ${phoneNumber}:`, contactError.message);
-        } else if (!existingContact) {
-          console.log(`Contato não encontrado para ${phoneNumber}. Criando novo contato...`);
-          const { error: insertError } = await supabase
-            .from('contacts')
-            .insert({
-              phone: phoneNumber,
-              full_name: msg.pushName || phoneNumber
-            });
-
-          if (insertError) {
-            console.error(`Erro ao criar contato para ${phoneNumber}:`, insertError.message);
-          } else {
-            console.log(`Contato para ${phoneNumber} criado com sucesso.`);
-          }
+        const { data: existingContact } = await supabase.from('contacts').select('id').eq('phone', phoneNumber).maybeSingle();
+        if (!existingContact) {
+          await supabase.from('contacts').insert({ phone: phoneNumber, full_name: msg.pushName || phoneNumber });
         }
       }
 
       const senderId = msg.key.fromMe ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : msg.key.participant || msg.key.remoteJid;
       const messageTimestamp = new Date(Number(msg.messageTimestamp) * 1000);
-      await upsertChat({ id: chatId, name: msg.pushName || chatId.split('@')[0], last_message_timestamp: messageTimestamp });
-
+      await upsertChat({ id: chatId, name: msg.pushName || chatId.split('@')[0], last_message_timestamp: messageTimestamp, status: 'open' });
+      
+      const messageType = getContentType(msg.message);
       let message_body = '';
-      const messageType = Object.keys(msg.message)[0];
-      if (messageType === 'conversation') { message_body = msg.message.conversation; } 
-      else if (messageType === 'extendedTextMessage') { message_body = msg.message.extendedTextMessage.text; }
+      let media_url = null;
+      let media_mime_type = null;
 
-      if (message_body) {
-        await saveMessage({ id: msg.key.id, chat_id: chatId, sender_id: senderId, message_type: messageType, message_body: message_body, sent_by_us: msg.key.fromMe, "timestamp": messageTimestamp });
-        console.log(`Mensagem de ${senderId} em ${chatId}: ${message_body}`);
+      if (messageType === 'conversation' || messageType === 'extendedTextMessage') {
+        message_body = msg.message.conversation || msg.message.extendedTextMessage.text;
+      } else if (['imageMessage', 'videoMessage', 'audioMessage'].includes(messageType)) {
+        try {
+          const stream = await downloadMediaMessage(msg, 'buffer', {}, { logger });
+          media_mime_type = msg.message[messageType].mimetype;
+          const fileExtension = media_mime_type.split('/')[1].split(';')[0];
+          const fileName = `${msg.key.id}.${fileExtension}`;
+          
+          await supabase.storage.from('whatsapp-media').upload(fileName, stream, { contentType: media_mime_type });
+          
+          const { data: publicUrlData } = supabase.storage.from('whatsapp-media').getPublicUrl(fileName);
+          media_url = publicUrlData.publicUrl;
+          message_body = msg.message[messageType].caption || '';
+        } catch (e) {
+          console.error('Erro ao descarregar e guardar a mídia:', e);
+        }
+      }
+
+      if (message_body || media_url) {
+        await saveMessage({ 
+          id: msg.key.id, 
+          chat_id: chatId, 
+          sender_id: senderId, 
+          message_type: messageType, 
+          message_body, 
+          sent_by_us: msg.key.fromMe, 
+          "timestamp": messageTimestamp,
+          media_url,
+          media_mime_type
+        });
       }
     }
   });
@@ -219,115 +241,143 @@ async function connectToWhatsApp() {
 
 // --- ROTAS DA API ---
 
-// Rota para status
-app.get('/status', (req, res) => {
-    res.json({ status: connectionStatus, user: sock?.user });
-});
-
-// Rota para conectar
-app.post('/connect', (req, res) => {
-  console.log('Recebida solicitação para conectar...');
-  connectToWhatsApp();
-  res.status(200).json({ message: 'Processo de conexão iniciado.' });
-});
-
-// Rota para desconectar
-app.post('/disconnect', async (req, res) => {
-  console.log('Recebida solicitação para desconectar...');
-  if (sock) {
-    await sock.logout();
-    if (fs.existsSync(authFolder)) {
-      fs.rmSync(authFolder, { recursive: true, force: true });
+const isAdmin = async (req, res, next) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) return res.status(401).json({ error: 'Token não fornecido.' });
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (error || !user) return res.status(401).json({ error: 'Token inválido.' });
+        if (user.user_metadata?.role !== 'admin') {
+            return res.status(403).json({ error: 'Acesso não autorizado.' });
+        }
+        req.user = user;
+        next();
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
+};
+
+app.get('/messages/:chatId', isAdmin, async (req, res) => {
+    const { chatId } = req.params;
+    try {
+        const { data, error } = await supabase
+            .from('whatsapp_messages')
+            .select('*')
+            .eq('chat_id', chatId)
+            .order('timestamp', { ascending: true });
+        if (error) throw error;
+        res.status(200).json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/archive-chat', isAdmin, async (req, res) => {
+    const { chatId, status } = req.body;
+    if (!chatId || !status) return res.status(400).json({ error: 'chatId e status são obrigatórios.' });
+    try {
+        const { data, error } = await supabase.from('whatsapp_chats').update({ status: status }).eq('id', chatId);
+        if (error) throw error;
+        res.status(200).json({ success: true, message: 'Chat atualizado com sucesso.' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/contacts', isAdmin, async (req, res) => {
+    const contactData = req.body;
+    if (!contactData || !contactData.phone) return res.status(400).json({ error: 'Dados do contato são inválidos.' });
+    try {
+        const { data, error } = await supabase
+            .from('contacts')
+            .upsert(contactData, { onConflict: 'phone' })
+            .select()
+            .single();
+        if (error) throw error;
+        res.status(200).json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/status', (req, res) => res.json({ status: connectionStatus, user: sock?.user }));
+app.post('/connect', (req, res) => { connectToWhatsApp(); res.status(200).json({ message: 'A iniciar conexão...' }); });
+app.post('/disconnect', async (req, res) => {
+    if (sock) await sock.logout();
+    if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
     sock = null;
     connectionStatus = 'Desconectado';
-    qrCodeData = null;
-    io.emit('status', { status: connectionStatus });
     res.status(200).json({ message: 'Desconectado com sucesso.' });
-  } else {
-    res.status(400).json({ message: 'Nenhuma conexão ativa para desconectar.' });
-  }
 });
-
-// Rota para enviar mensagens manuais
-app.post('/send-message', async (req, res) => {
+app.post('/send-message', isAdmin, async (req, res) => {
   const { number, message } = req.body;
-  if (!sock || connectionStatus !== 'Conectado') {
-    return res.status(500).json({ error: 'WhatsApp não está conectado.' });
-  }
-  if (!number || !message) {
-    return res.status(400).json({ error: 'Número e mensagem são obrigatórios.' });
-  }
-
+  if (!sock || connectionStatus !== 'Conectado') return res.status(500).json({ error: 'WhatsApp não está conectado.' });
+  if (!number || !message) return res.status(400).json({ error: 'Número e mensagem são obrigatórios.' });
   try {
     const jid = `${number}@s.whatsapp.net`;
     await sock.sendMessage(jid, { text: message });
     res.status(200).json({ success: true, message: 'Mensagem enviada com sucesso!' });
-  } catch (error) {
-    console.error('Erro ao enviar mensagem:', error);
-    res.status(500).json({ error: 'Falha ao enviar mensagem.' });
-  }
+  } catch (error) { res.status(500).json({ error: 'Falha ao enviar mensagem.' }); }
 });
-
-// Rota para notificações de pedido
-app.post('/notify/order-update', (req, res) => {
+app.post('/send-media', isAdmin, async (req, res) => {
+    if (!sock || connectionStatus !== 'Conectado') return res.status(500).json({ error: 'WhatsApp não está conectado.' });
+    if (!req.files || !req.body.number) return res.status(400).json({ error: 'Ficheiro e número são obrigatórios.' });
+    const { number, caption } = req.body;
+    const file = req.files.file;
+    const jid = `${number}@s.whatsapp.net`;
+    try {
+        let messageOptions = { caption: caption || '' };
+        if (file.mimetype.startsWith('image/')) messageOptions.image = file.data;
+        else if (file.mimetype.startsWith('video/')) messageOptions.video = file.data;
+        else if (file.mimetype.startsWith('audio/')) { messageOptions.audio = file.data; messageOptions.mimetype = file.mimetype; }
+        else return res.status(400).json({ error: 'Tipo de ficheiro não suportado.' });
+        await sock.sendMessage(jid, messageOptions);
+        res.status(200).json({ success: true, message: 'Mídia enviada com sucesso!' });
+    } catch (e) { res.status(500).json({ error: 'Falha ao enviar mídia.' }); }
+});
+app.post('/update-profile-picture', isAdmin, async (req, res) => {
+    if (!sock) return res.status(500).json({ error: 'WhatsApp não conectado.' });
+    if (!req.files) return res.status(400).json({ error: 'Nenhum ficheiro enviado.' });
+    try {
+        await sock.updateProfilePicture(sock.user.id, req.files.picture.data);
+        res.status(200).json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/update-profile-status', isAdmin, async (req, res) => {
+    if (!sock) return res.status(500).json({ error: 'WhatsApp não conectado.' });
+    try {
+        await sock.updateProfileStatus(req.body.status);
+        res.status(200).json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/update-profile-name', isAdmin, async (req, res) => {
+    if (!sock) return res.status(500).json({ error: 'WhatsApp não conectado.' });
+    try {
+        await sock.updateProfileName(req.body.name);
+        res.status(200).json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/notify/order-update', isAdmin, (req, res) => {
   const { orderId } = req.body;
-  if (!orderId) {
-    return res.status(400).json({ error: 'orderId é obrigatório.' });
-  }
+  if (!orderId) return res.status(400).json({ error: 'orderId é obrigatório.' });
   sendOrderStatusUpdate(orderId).catch(err => console.error(`Falha ao processar notificação para pedido ${orderId}:`, err));
   res.status(202).json({ message: 'Solicitação de notificação recebida.' });
 });
-
-// Nova rota para atualizar o status da loja
-app.post('/update-store-status', async (req, res) => {
+app.post('/update-store-status', isAdmin, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Token não fornecido.' });
-
-    // Verifica se o token pertence a um admin
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user || user.user_metadata?.role !== 'admin') {
-      return res.status(403).json({ error: 'Acesso não autorizado.' });
-    }
-
-    // Se for admin, executa a operação
     const { is_open } = req.body;
     const updateData = { id: 1, is_open };
-    if (is_open) {
-      updateData.last_opened_at = new Date().toISOString();
-    }
-    
-    // O cliente supabase principal já usa a service_key, então ele contorna o RLS
-    const { data, error } = await supabase
-      .from('store_settings')
-      .upsert(updateData)
-      .select()
-      .single();
-
+    if (is_open) updateData.last_opened_at = new Date().toISOString();
+    const { data, error } = await supabase.from('store_settings').upsert(updateData).select().single();
     if (error) throw error;
-    
     res.status(200).json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
-
 
 io.on('connection', (socket) => {
   console.log('Frontend conectado via Socket.IO');
-  
   socket.emit('status', { status: connectionStatus, user: sock?.user });
-  if (qrCodeData) {
-    socket.emit('qr', qrCodeData);
-  }
-
-  socket.on('get-status', () => {
-    socket.emit('status', { status: connectionStatus, user: sock?.user });
-    if (qrCodeData) {
-      socket.emit('qr', qrCodeData);
-    }
-  });
+  if (qrCodeData) socket.emit('qr', qrCodeData);
 });
 
 server.listen(port, () => {

@@ -6,7 +6,7 @@ export default function POSView({ session }) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentOrder, setCurrentOrder] = useState([]);
-  const [identifier, setIdentifier] = useState(''); // Para Nome/Mesa
+  const [identifier, setIdentifier] = useState('');
   const [placingOrder, setPlacingOrder] = useState(false);
   
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -40,7 +40,8 @@ export default function POSView({ session }) {
     setCurrentOrder(prevOrder => prevOrder.filter(item => item.id !== productId));
   };
 
-  const total = useMemo(() => currentOrder.reduce((sum, item) => sum + item.price * item.quantity, 0), [currentOrder]);
+  // CORRIGIDO: O cálculo do total agora verifica se o produto está em promoção
+  const total = useMemo(() => currentOrder.reduce((sum, item) => sum + (item.is_on_sale ? item.sale_price : item.price) * item.quantity, 0), [currentOrder]);
 
   const handleFinalizeOrder = async () => {
     if (currentOrder.length === 0) {
@@ -66,11 +67,12 @@ export default function POSView({ session }) {
 
     if (orderError) { alert('Erro ao criar pedido: ' + orderError.message); setPlacingOrder(false); return; }
 
+    // CORRIGIDO: Garante que o preço guardado no item do pedido é o preço correto
     const orderItems = currentOrder.map(item => ({
         order_id: orderData.id,
         product_id: item.id,
         quantity: item.quantity,
-        price: item.price
+        price: item.is_on_sale ? item.sale_price : item.price
     }));
     const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
 
@@ -110,7 +112,8 @@ export default function POSView({ session }) {
               <div key={product.id} className="pos-product-card" onClick={() => handleAddToOrder(product)}>
                 <div className="item-image-placeholder" style={{height: '6rem', backgroundImage: `url(${product.image_url})`, backgroundSize: 'cover', backgroundPosition: 'center'}}>{!product.image_url && 'Imagem'}</div>
                 <h5>{product.name}</h5>
-                <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}</span>
+                {/* CORRIGIDO: Exibe o preço promocional se aplicável */}
+                <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.is_on_sale ? product.sale_price : product.price)}</span>
               </div>
             ))}
           </div>
@@ -132,7 +135,8 @@ export default function POSView({ session }) {
                                 <button style={{color: '#dc2626', fontSize: '0.8rem'}} onClick={() => handleRemoveFromOrder(item.id)}>Remover</button>
                             </div>
                         </div>
-                        <p>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price * item.quantity)}</p>
+                        {/* CORRIGIDO: Exibe o preço correto do item no resumo do pedido */}
+                        <p>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((item.is_on_sale ? item.sale_price : item.price) * item.quantity)}</p>
                     </div>
                 ))
             }

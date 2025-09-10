@@ -6,6 +6,8 @@ import NewChatModal from './Chat/NewChatModal';
 import ContactInfo from './Chat/ContactInfo';
 import './Chat/Chat.css';
 
+const backendUrl = import.meta.env.VITE_WHATSAPP_BACKEND_URL || 'http://localhost:3001';
+
 export default function Chat({ session }) {
   const [allChats, setAllChats] = useState([]);
   const [visibleChats, setVisibleChats] = useState([]);
@@ -17,7 +19,6 @@ export default function Chat({ session }) {
 
   const fetchChats = useCallback(async () => {
     setLoading(true);
-    // Alterado para buscar da nova VIEW
     const { data, error } = await supabase
       .from('chats_with_profile')
       .select('*')
@@ -36,7 +37,6 @@ export default function Chat({ session }) {
     if (session) {
       fetchChats();
     }
-    // A subscrição continua na tabela original, pois a view não suporta real-time
     const channel = supabase.channel('realtime:whatsapp_chats')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_chats' },
         (payload) => {
@@ -64,13 +64,32 @@ export default function Chat({ session }) {
 
   const handleArchiveChat = async (chatId) => {
     const statusToSet = showArchived ? 'open' : 'archived';
-    const { error } = await supabase.from('whatsapp_chats').update({ status: statusToSet }).eq('id', chatId);
-    if (error) {
-      alert(`Erro ao ${showArchived ? 'desarquivar' : 'arquivar'} a conversa.`);
-    } else {
-      if(selectedChat?.id === chatId) {
-        setSelectedChat(null);
-      }
+    
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Utilizador não autenticado.");
+
+        const response = await fetch(`${backendUrl}/archive-chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({ chatId, status: statusToSet })
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || 'Falha ao arquivar a conversa.');
+        }
+
+        if(selectedChat?.id === chatId) {
+            setSelectedChat(null);
+        }
+        fetchChats(); // Atualiza a lista após a operação ser bem-sucedida
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
     }
   };
   

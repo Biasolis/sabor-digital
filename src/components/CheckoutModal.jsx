@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export default function CheckoutModal({ isOpen, onClose, cart, session, storeSettings, onOrderPlaced }) {
+export default function CheckoutModal({ isOpen, onClose, cart, session, storeSettings, onOrderPlaced, profile }) {
   const [deliveryType, setDeliveryType] = useState('delivery');
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [changeFor, setChangeFor] = useState('');
   const [placingOrder, setPlacingOrder] = useState(false);
 
-  const subtotal = useMemo(() => cart.reduce((acc, item) => acc + item.price * item.quantity, 0), [cart]);
+  // CORRIGIDO: O cálculo do subtotal agora verifica se o produto está em promoção
+  const subtotal = useMemo(() => cart.reduce((acc, item) => acc + (item.is_on_sale ? item.sale_price : item.price) * item.quantity, 0), [cart]);
   const deliveryFee = deliveryType === 'delivery' ? (storeSettings?.delivery_fee || 0) : 0;
   const total = subtotal + deliveryFee;
 
@@ -20,8 +21,12 @@ export default function CheckoutModal({ isOpen, onClose, cart, session, storeSet
     setPlacingOrder(true);
 
     const { data: orderData, error: orderError } = await supabase.from('orders').insert({
-        user_id: session.user.id, total_price: total, status: 'pending',
-        delivery_type: deliveryType, payment_method: paymentMethod,
+        user_id: session.user.id,
+        contact_id: profile.contact_id, // Adiciona o ID do contato ao pedido
+        total_price: total, 
+        status: 'pending',
+        delivery_type: deliveryType, 
+        payment_method: paymentMethod,
         change_for: paymentMethod === 'cash' ? changeFor : null
     }).select().single();
 
@@ -30,7 +35,13 @@ export default function CheckoutModal({ isOpen, onClose, cart, session, storeSet
         setPlacingOrder(false); return;
     }
 
-    const orderItems = cart.map(item => ({order_id: orderData.id, product_id: item.id, quantity: item.quantity, price: item.price}));
+    // CORRIGIDO: Garante que o preço guardado no item do pedido é o preço correto (promocional ou não)
+    const orderItems = cart.map(item => ({
+        order_id: orderData.id, 
+        product_id: item.id, 
+        quantity: item.quantity, 
+        price: item.is_on_sale ? item.sale_price : item.price 
+    }));
     const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
     if (itemsError) {
         alert('Erro ao salvar os itens do pedido: ' + itemsError.message);
@@ -38,7 +49,7 @@ export default function CheckoutModal({ isOpen, onClose, cart, session, storeSet
     }
 
     alert('Pedido realizado com sucesso!');
-    onOrderPlaced(); // Função para limpar o carrinho e fechar os modais
+    onOrderPlaced();
     setPlacingOrder(false);
   };
 

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabaseClient'; 
 import './App.css';
 import MenuDashboard from './components/MenuDashboard'; 
-// ATUALIZADO: Importa o novo gestor de abas de pedidos
 import OrdersDashboard from './components/OrdersDashboard'; 
 import MyOrders from './components/MyOrders';
 import SettingsManagement from './components/SettingsManagement';
@@ -16,9 +15,9 @@ import PromotionManagement from './components/PromotionManagement';
 import KitchenDisplay from './components/KitchenDisplay';
 import WhatsAppDashboard from './components/WhatsAppDashboard';
 import AdminProfile from './components/AdminProfile';
+import WhatsAppConfigDashboard from './components/WhatsAppConfigDashboard';
 
 // --- Ícones (SVGs) ---
-// (O código dos ícones permanece o mesmo)
 const MenuIcon = (props) => ( <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg> );
 const UserIcon = (props) => ( <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> );
 const ShoppingBagIcon = (props) => ( <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-2Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> );
@@ -37,8 +36,6 @@ const TagIcon = (props) => (<svg {...props} xmlns="http://www.w3.org/2000/svg" w
 const ChefHatIcon = (props) => (<svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21a2 2 0 0 1-2-2V12a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2Z"/><path d="M5 10V8c0-3.87 3.13-7 7-7s7 3.13 7 7v2"/><path d="M12 10v11"/></svg>);
 const MessageCircleIcon = (props) => (<svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>);
 
-
-// (O restante do ficheiro, como AuthModal, CaixaDashboard, etc., permanece o mesmo...)
 // --- Componente de Autenticação em Modal ---
 const AuthModal = ({ isOpen, onClose, storeName }) => {
     const [loading, setLoading] = useState(false); const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
@@ -54,9 +51,12 @@ const AdminDashboard = ({ storeName, session, logoUrl, storeSettings, onSettings
     const handleLogout = async () => { await supabase.auth.signOut(); };
     const renderContent = () => { 
         switch(activeTab) { 
-            case 'orders': return <OrdersDashboard />; // ATUALIZADO
+            case 'orders': return <OrdersDashboard />; 
             case 'cozinha': return <KitchenDisplay session={session} />;
-            case 'whatsapp': return <WhatsAppDashboard session={session} />;
+            // CORRIGIDO: Garante que a aba 'whatsapp_chat' renderize o componente de Chat
+            case 'whatsapp_chat': return <WhatsAppDashboard session={session} />;
+            // CORRIGIDO: Garante que a aba 'whatsapp_config' renderize o componente de Configuração
+            case 'whatsapp_config': return <WhatsAppConfigDashboard />;
             case 'menu': return <MenuDashboard />; 
             case 'promotions': return <PromotionManagement />; 
             case 'reports': return <ReportsDashboard />; 
@@ -68,7 +68,7 @@ const AdminDashboard = ({ storeName, session, logoUrl, storeSettings, onSettings
             default: return null; 
         } 
     };
-  return ( <div className="admin-layout"> <aside className="sidebar"> <div> <div className="sidebar-header">{logoUrl ? <img src={logoUrl} alt="Logo" /> : <UtensilsCrossedIcon style={{height: '2rem', width: '2rem'}} />}<span>{storeName}</span></div> <div style={{padding: '0 1.5rem 1rem'}}> {storeSettings?.is_open ? (<span style={{color: '#16a34a', backgroundColor: '#dcfce7', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '600'}}>Aberto</span>) : (<span style={{color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '600'}}>Fechado</span>)} </div> </div> <nav className="sidebar-nav"> <button onClick={() => setActiveTab('orders')} className={activeTab === 'orders' ? 'active' : ''}><ClipboardListIcon /> Pedidos</button> <button onClick={() => setActiveTab('cozinha')} className={activeTab === 'cozinha' ? 'active' : ''}><ChefHatIcon /> Cozinha</button> <button onClick={() => setActiveTab('whatsapp')} className={activeTab === 'whatsapp' ? 'active' : ''}><MessageCircleIcon /> WhatsApp</button> <button onClick={() => setActiveTab('pdv')} className={activeTab === 'pdv' ? 'active' : ''}><HardDriveIcon /> PDV</button> <button onClick={() => setActiveTab('menu')} className={activeTab === 'menu' ? 'active' : ''}><MenuIcon /> Cardápio</button> <button onClick={() => setActiveTab('promotions')} className={activeTab === 'promotions' ? 'active' : ''}><TagIcon /> Promoções</button> <button onClick={() => setActiveTab('customers')} className={activeTab === 'customers' ? 'active' : ''}><Users2Icon /> Clientes</button> <button onClick={() => setActiveTab('reports')} className={activeTab === 'reports' ? 'active' : ''}><BarChartIcon /> Relatórios</button> <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'active' : ''}><UsersIcon /> Equipa</button> <button onClick={() => setActiveTab('profile')} className={activeTab === 'profile' ? 'active' : ''}><UserIcon /> Meu Perfil</button> <button onClick={() => setActiveTab('settings')} className={activeTab === 'settings' ? 'active' : ''}><SettingsIcon /> Configurações</button> </nav> <div className="sidebar-footer"><button onClick={handleLogout}><LogOutIcon /> Sair</button></div> </aside> <main className="main-content">{renderContent()}</main> </div> );
+  return ( <div className="admin-layout"> <aside className="sidebar"> <div> <div className="sidebar-header">{logoUrl ? <img src={logoUrl} alt="Logo" /> : <UtensilsCrossedIcon style={{height: '2rem', width: '2rem'}} />}<span>{storeName}</span></div> <div style={{padding: '0 1.5rem 1rem'}}> {storeSettings?.is_open ? (<span style={{color: '#166534', backgroundColor: '#dcfce7', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '600'}}>Aberto</span>) : (<span style={{color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '600'}}>Fechado</span>)} </div> </div> <nav className="sidebar-nav"> <button onClick={() => setActiveTab('orders')} className={activeTab === 'orders' ? 'active' : ''}><ClipboardListIcon /> Pedidos</button> <button onClick={() => setActiveTab('cozinha')} className={activeTab === 'cozinha' ? 'active' : ''}><ChefHatIcon /> Cozinha</button> <button onClick={() => setActiveTab('whatsapp_chat')} className={activeTab === 'whatsapp_chat' ? 'active' : ''}><MessageCircleIcon /> WhatsApp Chat</button> <button onClick={() => setActiveTab('whatsapp_config')} className={activeTab === 'whatsapp_config' ? 'active' : ''}><SettingsIcon /> WhatsApp Config</button> <button onClick={() => setActiveTab('pdv')} className={activeTab === 'pdv' ? 'active' : ''}><HardDriveIcon /> PDV</button> <button onClick={() => setActiveTab('menu')} className={activeTab === 'menu' ? 'active' : ''}><MenuIcon /> Cardápio</button> <button onClick={() => setActiveTab('promotions')} className={activeTab === 'promotions' ? 'active' : ''}><TagIcon /> Promoções</button> <button onClick={() => setActiveTab('customers')} className={activeTab === 'customers' ? 'active' : ''}><Users2Icon /> Clientes</button> <button onClick={() => setActiveTab('reports')} className={activeTab === 'reports' ? 'active' : ''}><BarChartIcon /> Relatórios</button> <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'active' : ''}><UsersIcon /> Equipa</button> <button onClick={() => setActiveTab('profile')} className={activeTab === 'profile' ? 'active' : ''}><UserIcon /> Meu Perfil</button> <button onClick={() => setActiveTab('settings')} className={activeTab === 'settings' ? 'active' : ''}><SettingsIcon /> Configurações</button> </nav> <div className="sidebar-footer"><button onClick={handleLogout}><LogOutIcon /> Sair</button></div> </aside> <main className="main-content">{renderContent()}</main> </div> );
 };
 
 // --- Visão do Caixa ---
@@ -93,9 +93,9 @@ const KitchenDashboard = ({ storeName, session, logoUrl }) => {
 // --- Componente do Carrinho de Compras ---
 const ShoppingCartModal = ({ isOpen, onClose, cart, updateCart, onCheckout }) => {
     if (!isOpen) return null;
-    const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+    const total = cart.reduce((acc, item) => acc + (item.is_on_sale ? item.sale_price : item.price) * item.quantity, 0);
     const handleQuantityChange = (productId, newQuantity) => { if (newQuantity < 1) { updateCart(cart.filter(item => item.id !== productId)); } else { updateCart(cart.map(item => item.id === productId ? { ...item, quantity: newQuantity } : item)); } };
-    return ( <div className="cart-modal-overlay" onClick={onClose}> <div className="cart-modal-content" onClick={(e) => e.stopPropagation()}> <div className="cart-header"><h2>Meu Carrinho</h2><button onClick={onClose}>&times;</button></div> <div className="cart-body"> {cart.length === 0 ? <p>Seu carrinho está vazio.</p> : cart.map(item => ( <div key={item.id} className="cart-item"> <div className="cart-item-image" style={{backgroundImage: `url(${item.image_url})`, backgroundSize: 'cover', backgroundPosition: 'center'}} /> <div className="cart-item-details"> <div className="cart-item-info"> <h4>{item.name}</h4> <p>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price * item.quantity)}</p> </div> <div className="cart-item-actions"> <button onClick={() => handleQuantityChange(item.id, item.quantity - 1)}>-</button> <span>{item.quantity}</span> <button onClick={() => handleQuantityChange(item.id, item.quantity + 1)}>+</button> <button className="cart-item-remove-btn" onClick={() => updateCart(cart.filter(i => i.id !== item.id))}>Remover</button> </div> </div> </div> ))} </div> {cart.length > 0 && ( <div className="cart-footer"> <div className="cart-total"><span>Total</span><span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span></div> <button onClick={onCheckout} className="btn btn-customer">Continuar</button> </div> )} </div> </div> );
+    return ( <div className="cart-modal-overlay" onClick={onClose}> <div className="cart-modal-content" onClick={(e) => e.stopPropagation()}> <div className="cart-header"><h2>Meu Carrinho</h2><button onClick={onClose}>&times;</button></div> <div className="cart-body"> {cart.length === 0 ? <p>Seu carrinho está vazio.</p> : cart.map(item => ( <div key={item.id} className="cart-item"> <div className="cart-item-image" style={{backgroundImage: `url(${item.image_url})`, backgroundSize: 'cover', backgroundPosition: 'center'}} /> <div className="cart-item-details"> <div className="cart-item-info"> <h4>{item.name}</h4> <p>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((item.is_on_sale ? item.sale_price : item.price) * item.quantity)}</p> </div> <div className="cart-item-actions"> <button onClick={() => handleQuantityChange(item.id, item.quantity - 1)}>-</button> <span>{item.quantity}</span> <button onClick={() => handleQuantityChange(item.id, item.quantity + 1)}>+</button> <button className="cart-item-remove-btn" onClick={() => updateCart(cart.filter(i => i.id !== item.id))}>Remover</button> </div> </div> </div> ))} </div> {cart.length > 0 && ( <div className="cart-footer"> <div className="cart-total"><span>Total</span><span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span></div> <button onClick={onCheckout} className="btn btn-customer">Continuar</button> </div> )} </div> </div> );
 };
 
 // --- Visão Principal (Pública e do Cliente) ---
@@ -141,6 +141,10 @@ const MainView = ({ session, profile, storeName, logoUrl, storeSettings, setShow
     const handleLogout = async () => { await supabase.auth.signOut(); };
 
     const handleAddToCart = (product) => {
+        if (!storeSettings?.is_open) {
+            alert("A loja está fechada no momento e não aceita novos pedidos.");
+            return;
+        }
         setCart(prevCart => {
             const existingItem = prevCart.find(item => item.id === product.id);
             if (existingItem) { return prevCart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item); } 
@@ -176,7 +180,12 @@ const MainView = ({ session, profile, storeName, logoUrl, storeSettings, setShow
       
       <div className="customer-view">
         <header className="customer-header">
-          <div className="logo">{logoUrl ? <img src={logoUrl} alt="Logo" /> : <UtensilsCrossedIcon style={{height: '2rem', width: '2rem'}} />}<h1>{storeName}</h1></div>
+          <div className="logo-section">
+            <div className="logo">{logoUrl ? <img src={logoUrl} alt="Logo" /> : <UtensilsCrossedIcon style={{height: '2rem', width: '2rem'}} />}<h1>{storeName}</h1></div>
+            <div className={`store-status-indicator ${storeSettings?.is_open ? 'open' : 'closed'}`}>
+                {storeSettings?.is_open ? 'Aberto' : 'Fechado'}
+            </div>
+          </div>
           <div className="customer-actions">
             {session ? (
               <>

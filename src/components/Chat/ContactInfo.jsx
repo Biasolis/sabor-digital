@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 
+const backendUrl = import.meta.env.VITE_WHATSAPP_BACKEND_URL || 'http://localhost:3001';
+
 export default function ContactInfo({ chat, onClose }) {
   const [contact, setContact] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -19,7 +21,6 @@ export default function ContactInfo({ chat, onClose }) {
       }
       setLoading(true);
       const phoneNumber = chat.id.split('@')[0];
-      // ATUALIZADO: Trocado .single() por .maybeSingle()
       const { data, error } = await supabase
         .from('contacts')
         .select('*')
@@ -49,40 +50,33 @@ export default function ContactInfo({ chat, onClose }) {
     e.preventDefault();
     setLoading(true);
 
-    const contactData = {
-        full_name: formData.full_name,
-        email: formData.email,
-        phone: formData.phone,
-        cpf: formData.cpf,
-        address: formData.address,
-        cep: formData.cep,
-        number: formData.number,
-        neighborhood: formData.neighborhood,
-        complement: formData.complement
-    };
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Utilizador não autenticado.");
 
-    let error;
-    if (contact && contact.id) {
-      ({ error } = await supabase
-        .from('contacts')
-        .update(contactData)
-        .eq('id', contact.id));
-    } else {
-      ({ error } = await supabase
-        .from('contacts')
-        .insert(contactData));
-    }
+        const response = await fetch(`${backendUrl}/contacts`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify(formData)
+        });
 
-    if (error) {
-      alert("Erro ao salvar contato: " + error.message);
-    } else {
-      alert("Contato salvo com sucesso!");
-      const { data: refreshedContact } = await supabase.from('contacts').select('*').eq('phone', formData.phone).single();
-      setContact(refreshedContact);
-      setIsEditing(false);
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || 'Falha ao salvar o contato.');
+        }
+        
+        alert("Contato salvo com sucesso!");
+        setContact(result);
+        setIsEditing(false);
+
+    } catch (error) {
+        alert(`Erro ao salvar contato: ${error.message}`);
+    } finally {
+        setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   const FormContent = () => (
