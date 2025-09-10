@@ -166,7 +166,7 @@ async function connectToWhatsApp() {
           const picUrl = await sock.profilePictureUrl(chat.id, 'image');
           await supabase.from('whatsapp_chats').upsert({ id: chat.id, profile_picture_url: picUrl }, { onConflict: 'id' });
         } catch (e) {
-          // Silencia o erro
+            // Silencia o erro
         }
       }
     }
@@ -186,6 +186,33 @@ async function connectToWhatsApp() {
         continue;
       }
 
+      // LÓGICA DO CHATBOT REFATORADA
+      if (!msg.key.fromMe && !isGroup) {
+          try {
+              const chatbotUrl = process.env.CHATBOT_BACKEND_URL || 'http://localhost:3002';
+              const response = await fetch(`${chatbotUrl}/process-message`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      chatId: msg.key.remoteJid,
+                      messageBody: msg.message?.conversation || msg.message?.extendedTextMessage?.text || ''
+                  })
+              });
+              const { replies } = await response.json();
+
+              if (replies && replies.length > 0) {
+                  for (const reply of replies) {
+                      await sock.sendMessage(chatId, { text: reply.content });
+                  }
+                  // Impede que a mensagem do utilizador seja guardada se o bot respondeu
+                  continue; 
+              }
+          } catch (e) {
+              console.error("Erro ao comunicar com o backend do chatbot:", e.message);
+          }
+      }
+
+      // Lógica de salvar contato e mensagem
       if (!msg.key.fromMe && !isGroup) {
         const phoneNumber = chatId.split('@')[0];
         const { data: existingContact } = await supabase.from('contacts').select('id').eq('phone', phoneNumber).maybeSingle();
@@ -217,6 +244,7 @@ async function connectToWhatsApp() {
           const { data: publicUrlData } = supabase.storage.from('whatsapp-media').getPublicUrl(fileName);
           media_url = publicUrlData.publicUrl;
           message_body = msg.message[messageType].caption || '';
+
         } catch (e) {
           console.error('Erro ao descarregar e guardar a mídia:', e);
         }

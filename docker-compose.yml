@@ -11,27 +11,47 @@ services:
     environment:
       - VITE_SUPABASE_URL=http://localhost:8000
       - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
+      # Adiciona a variável para o frontend saber onde estão os backends
+      - VITE_WHATSAPP_BACKEND_URL=http://localhost:3001
+      - VITE_CHATBOT_BACKEND_URL=http://localhost:3002
     depends_on:
       - supabase-kong
 
-  # 2. NOVO SERVIÇO: Backend do WhatsApp
+  # 2. Backend do WhatsApp
   whatsapp-backend:
     build:
       context: ./whatsapp-backend
     ports:
-      - "3001:3001" # Expõe a porta do nosso novo servidor
+      - "3001:3001"
     volumes:
-      - ./whatsapp-backend:/app # Mapeia os arquivos para desenvolvimento
+      - ./whatsapp-backend:/app
       - /app/node_modules
     environment:
-      # Futuramente, colocaremos as variáveis de conexão do Supabase aqui
       - SUPABASE_URL=http://supabase-kong:8000
-      - SUPABASE_ANON_KEY=${ANON_KEY}
+      - SUPABASE_SERVICE_KEY=${SERVICE_ROLE_KEY}
+      - CHATBOT_BACKEND_URL=http://chatbot-backend:3002
+    depends_on:
+      - supabase-kong
+      - chatbot-backend # Garante que o chatbot inicie antes
+    command: npm start
+
+  # 3. NOVO SERVIÇO: Backend do Chatbot
+  chatbot-backend:
+    build:
+      context: ./chatbot-backend
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./chatbot-backend:/app
+      - /app/node_modules
+    environment:
+      - SUPABASE_URL=http://supabase-kong:8000
+      - SUPABASE_SERVICE_KEY=${SERVICE_ROLE_KEY}
     depends_on:
       - supabase-kong
     command: npm start
 
-  # 3. Supabase (Serviços de Backend)
+  # 4. Supabase (Serviços de Backend)
   supabase-db:
     image: supabase/postgres:14.1.0
     restart: always
@@ -108,7 +128,6 @@ services:
       - ANON_KEY=${ANON_KEY}
       - SERVICE_KEY=${SERVICE_ROLE_KEY}
       - JWT_SECRET=${JWT_SECRET}
-      - DATABASE_URL=postgres://supabase:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
       - FILE_SIZE_LIMIT=52428800
       - STORAGE_BACKEND=file
       - TENANT_ID=stub
