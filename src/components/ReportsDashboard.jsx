@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import OrderDetailModal from './OrderDetailModal'; // Importa o modal de detalhes do pedido
+import OrderDetailModal from './OrderDetailModal';
+
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
 
 export default function ReportsDashboard() {
   const [reportData, setReportData] = useState({ revenue: 0, orderCount: 0, topProducts: [] });
-  const [orders, setOrders] = useState([]); // NOVO: Estado para guardar a lista de pedidos
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [period, setPeriod] = useState('day'); // 'day', 'week', 'month'
   
-  // NOVO: Estados para controlar o modal de detalhes
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Mapeamento de status para usar no relatório
   const statusMap = {
     pending: { text: "Pendente", class: "pending" },
     accepted: { text: "Em Preparo", class: "accepted" },
@@ -23,61 +22,21 @@ export default function ReportsDashboard() {
 
   const fetchReportData = async () => {
     setLoading(true);
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/orders/report?period=${period}`);
+        if (!response.ok) throw new Error("Falha ao buscar dados do relatório.");
+        
+        const { allOrders, summary } = await response.json();
+        
+        setOrders(allOrders);
+        setReportData(summary);
 
-    // Define o intervalo de datas com base no período
-    const today = new Date();
-    let startDate = new Date();
-    const endDate = new Date();
-
-    if (period === 'day') {
-      startDate.setHours(0, 0, 0, 0);
-    } else if (period === 'week') {
-      startDate.setDate(today.getDate() - today.getDay());
-      startDate.setHours(0, 0, 0, 0);
-    } else if (period === 'month') {
-      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    } catch (error) {
+        console.error("Erro ao buscar dados do relatório:", error);
     }
-
-    // 1. Busca todos os pedidos no período, incluindo os dados dos contactos e itens
-    const { data: allOrders, error: ordersError } = await supabase
-      .from('orders')
-      .select('*, contacts(*), order_items(*, products(name))')
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString())
-      .order('created_at', { ascending: false });
-
-    if (ordersError) {
-      console.error("Erro ao buscar pedidos para o relatório:", ordersError);
-      setLoading(false);
-      return;
-    }
-    
-    setOrders(allOrders); // Guarda a lista completa de pedidos
-
-    // 2. Filtra apenas os pedidos finalizados para os cálculos de resumo
-    const deliveredOrders = allOrders.filter(o => o.status === 'delivered');
-    const totalRevenue = deliveredOrders.reduce((sum, order) => sum + order.total_price, 0);
-    const orderCount = deliveredOrders.length;
-
-    // 3. Calcula os produtos mais vendidos a partir dos pedidos finalizados
-    const deliveredOrderItems = deliveredOrders.flatMap(o => o.order_items);
-    const productCount = deliveredOrderItems.reduce((acc, item) => {
-      if (item.products) {
-        acc[item.products.name] = (acc[item.products.name] || 0) + item.quantity;
-      }
-      return acc;
-    }, {});
-
-    const topProducts = Object.entries(productCount)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 10)
-      .map(([name, quantity]) => ({ name, quantity }));
-
-    setReportData({ revenue: totalRevenue, orderCount, topProducts });
     setLoading(false);
   };
   
-  // O useEffect agora só tem uma dependência
   useEffect(() => {
     fetchReportData();
   }, [period]);
@@ -89,12 +48,11 @@ export default function ReportsDashboard() {
 
   return (
     <>
-      {/* Adiciona o modal ao componente */}
       <OrderDetailModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         order={selectedOrder} 
-        onStatusChange={fetchReportData} // Recarrega os dados se o status for alterado
+        onStatusChange={fetchReportData}
       />
       <div className="admin-content">
         <div className="page-header">
@@ -121,7 +79,6 @@ export default function ReportsDashboard() {
               </div>
             </div>
             
-            {/* NOVO: Lista detalhada de todos os pedidos do período */}
             <h4 style={{marginTop: '2rem'}}>Todos os Pedidos do Período</h4>
             <div className="product-table-wrapper">
                 <table className="product-table">

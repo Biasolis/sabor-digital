@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { validateCPF } from '../utils/cpfValidator';
 
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+
 export default function ProfileManagement({ isOpen, onClose, session, onProfileUpdate }) {
   const [contact, setContact] = useState({ full_name: '', address: '', phone: '', cep: '', number: '', neighborhood: '', complement: '', cpf: '', accepts_communications: false });
   const [loading, setLoading] = useState(false);
@@ -27,6 +29,7 @@ export default function ProfileManagement({ isOpen, onClose, session, onProfileU
     if (!isOpen) return;
     const fetchProfileData = async () => {
       setLoading(true);
+      // Busca o perfil para obter o contact_id
       const { data, error } = await supabase
         .from('profiles')
         .select('*, contacts(*)')
@@ -67,28 +70,20 @@ export default function ProfileManagement({ isOpen, onClose, session, onProfileU
     }
     setLoading(true);
     
-    // Os dados do formulário agora atualizam a tabela 'contacts'
-    const { error } = await supabase
-      .from('contacts')
-      .update({
-        full_name: contact.full_name,
-        address: contact.address,
-        phone: contact.phone,
-        cep: contact.cep,
-        number: contact.number,
-        neighborhood: contact.neighborhood,
-        complement: contact.complement,
-        cpf: contact.cpf,
-        accepts_communications: contact.accepts_communications
-      })
-      .eq('id', profile.contact_id); // Usa o contact_id do perfil para encontrar o registo certo
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/customers/${profile.contact_id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(contact)
+        });
 
-    if (error) {
-      alert("Erro ao atualizar perfil: " + error.message);
-    } else {
-      alert("Perfil atualizado com sucesso!");
-      onProfileUpdate();
-      onClose();
+        if (!response.ok) throw new Error("Falha ao atualizar o perfil.");
+
+        alert("Perfil atualizado com sucesso!");
+        onProfileUpdate();
+        onClose();
+    } catch (error) {
+        alert("Erro ao atualizar perfil: " + error.message);
     }
     setLoading(false);
   };

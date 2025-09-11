@@ -1,22 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+
 export default function KitchenDisplay({ session }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAcceptedOrders = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('orders')
-      .select(`*, order_items(*, products(name))`)
-      .eq('status', 'accepted')
-      .order('created_at', { ascending: true }); // Mais antigos primeiro
-
-    if (error) {
-      console.error("Erro ao buscar pedidos para a cozinha:", error);
-    } else {
-      setOrders(data);
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/orders/kitchen`);
+        if (!response.ok) throw new Error('Falha ao buscar pedidos para a cozinha.');
+        const data = await response.json();
+        setOrders(data);
+    } catch (error) {
+        console.error("Erro ao buscar pedidos para a cozinha:", error);
     }
     setLoading(false);
   };
@@ -27,10 +26,10 @@ export default function KitchenDisplay({ session }) {
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
-        table: 'orders' 
+        table: 'orders',
+        filter: 'status=eq.accepted'
       }, 
       (payload) => {
-        // Recarrega a lista se um pedido for atualizado para 'accepted' ou removido da lista
         fetchAcceptedOrders();
       })
       .subscribe();
@@ -41,15 +40,17 @@ export default function KitchenDisplay({ session }) {
   }, []);
 
   const handleMarkAsReady = async (orderId) => {
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: 'ready' })
-      .eq('id', orderId);
-    
-    if (error) {
-      alert("Erro ao marcar pedido como pronto: " + error.message);
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/orders/${orderId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'ready' })
+        });
+        if (!response.ok) throw new Error('Falha ao marcar pedido como pronto.');
+        // A atualização em tempo real via Supabase vai remover o card da tela.
+    } catch (error) {
+        alert("Erro ao marcar pedido como pronto: " + error.message);
     }
-    // A atualização em tempo real vai remover o card da tela
   };
 
   if (loading) return <p className="loading-message">A carregar pedidos...</p>;

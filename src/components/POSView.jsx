@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../lib/supabaseClient';
+
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
 
 export default function POSView({ session }) {
   const [products, setProducts] = useState([]);
@@ -15,12 +16,16 @@ export default function POSView({ session }) {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [productsResponse, categoriesResponse] = await Promise.all([
-          supabase.from('products').select('*').order('name'),
-          supabase.from('categories').select('*').order('name')
-      ]);
-      if (productsResponse.data) setProducts(productsResponse.data);
-      if (categoriesResponse.data) setCategories(categoriesResponse.data);
+      try {
+        const [productsResponse, categoriesResponse] = await Promise.all([
+            fetch(`${apiBackendUrl}/api/products`),
+            fetch(`${apiBackendUrl}/api/categories`)
+        ]);
+        if (productsResponse.ok) setProducts(await productsResponse.json());
+        if (categoriesResponse.ok) setCategories(await categoriesResponse.json());
+      } catch (error) {
+          console.error("Erro ao buscar dados para o PDV:", error);
+      }
       setLoading(false);
     };
     fetchData();
@@ -40,7 +45,6 @@ export default function POSView({ session }) {
     setCurrentOrder(prevOrder => prevOrder.filter(item => item.id !== productId));
   };
 
-  // CORRIGIDO: O cálculo do total agora verifica se o produto está em promoção
   const total = useMemo(() => currentOrder.reduce((sum, item) => sum + (item.is_on_sale ? item.sale_price : item.price) * item.quantity, 0), [currentOrder]);
 
   const handleFinalizeOrder = async () => {
@@ -55,32 +59,37 @@ export default function POSView({ session }) {
     
     setPlacingOrder(true);
 
-    const { data: orderData, error: orderError } = await supabase.from('orders').insert({
-        user_id: session.user.id,
-        total_price: total,
-        status: 'accepted',
-        delivery_type: 'in_person',
-        payment_method: 'pending',
-        payment_status: 'pending',
-        in_person_identifier: identifier
-    }).select().single();
+    const orderPayload = {
+        order: {
+            user_id: session.user.id,
+            total_price: total,
+            status: 'accepted',
+            delivery_type: 'in_person',
+            payment_method: 'pending',
+            payment_status: 'pending',
+            in_person_identifier: identifier
+        },
+        items: currentOrder.map(item => ({
+            product_id: item.id,
+            quantity: item.quantity,
+            price: item.is_on_sale ? item.sale_price : item.price
+        }))
+    };
+    
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/orders`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(orderPayload)
+        });
+        if (!response.ok) throw new Error("Falha ao criar o pedido no PDV.");
 
-    if (orderError) { alert('Erro ao criar pedido: ' + orderError.message); setPlacingOrder(false); return; }
-
-    // CORRIGIDO: Garante que o preço guardado no item do pedido é o preço correto
-    const orderItems = currentOrder.map(item => ({
-        order_id: orderData.id,
-        product_id: item.id,
-        quantity: item.quantity,
-        price: item.is_on_sale ? item.sale_price : item.price
-    }));
-    const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-
-    if (itemsError) { alert('Erro ao adicionar itens: ' + itemsError.message); setPlacingOrder(false); return; }
-
-    alert(`Pedido para "${identifier}" criado com sucesso!`);
-    setCurrentOrder([]);
-    setIdentifier('');
+        alert(`Pedido para "${identifier}" criado com sucesso!`);
+        setCurrentOrder([]);
+        setIdentifier('');
+    } catch (error) {
+        alert('Erro ao criar pedido: ' + error.message);
+    }
     setPlacingOrder(false);
   };
   
@@ -112,7 +121,6 @@ export default function POSView({ session }) {
               <div key={product.id} className="pos-product-card" onClick={() => handleAddToOrder(product)}>
                 <div className="item-image-placeholder" style={{height: '6rem', backgroundImage: `url(${product.image_url})`, backgroundSize: 'cover', backgroundPosition: 'center'}}>{!product.image_url && 'Imagem'}</div>
                 <h5>{product.name}</h5>
-                {/* CORRIGIDO: Exibe o preço promocional se aplicável */}
                 <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.is_on_sale ? product.sale_price : product.price)}</span>
               </div>
             ))}
@@ -135,7 +143,6 @@ export default function POSView({ session }) {
                                 <button style={{color: '#dc2626', fontSize: '0.8rem'}} onClick={() => handleRemoveFromOrder(item.id)}>Remover</button>
                             </div>
                         </div>
-                        {/* CORRIGIDO: Exibe o preço correto do item no resumo do pedido */}
                         <p>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((item.is_on_sale ? item.sale_price : item.price) * item.quantity)}</p>
                     </div>
                 ))

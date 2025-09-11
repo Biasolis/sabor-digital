@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
 
 export default function WhatsAppSettings() {
   const [settings, setSettings] = useState({ send_order_updates: true, process_group_messages: false });
@@ -8,17 +9,15 @@ export default function WhatsAppSettings() {
   useEffect(() => {
     const fetchSettings = async () => {
       setLoading(true);
-      // ATUALIZADO: Trocado .single() por .maybeSingle()
-      const { data, error } = await supabase
-        .from('whatsapp_settings')
-        .select('*')
-        .eq('id', 1)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Erro ao buscar configurações do WhatsApp:', error);
-      } else if (data) {
-        setSettings(data);
+      try {
+          const response = await fetch(`${apiBackendUrl}/api/settings/whatsapp`);
+          if (!response.ok && response.status !== 404) throw new Error("Falha ao buscar configurações do WhatsApp.");
+          const data = await response.json();
+          if (data) {
+              setSettings(data);
+          }
+      } catch (error) {
+          console.error('Erro ao buscar configurações do WhatsApp:', error);
       }
       setLoading(false);
     };
@@ -26,14 +25,18 @@ export default function WhatsAppSettings() {
   }, []);
 
   const handleSettingChange = async (settingName, value) => {
-    setSettings(prev => ({ ...prev, [settingName]: value }));
+    const newSettings = { ...settings, [settingName]: value };
+    setSettings(newSettings);
     
-    const { error } = await supabase
-      .from('whatsapp_settings')
-      .upsert({ id: 1, [settingName]: value });
-
-    if (error) {
-      alert('Erro ao salvar configuração: ' + error.message);
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/settings/whatsapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: 1, [settingName]: value })
+        });
+        if (!response.ok) throw new Error("Falha ao salvar configuração.");
+    } catch (error) {
+        alert('Erro ao salvar configuração: ' + error.message);
     }
   };
 

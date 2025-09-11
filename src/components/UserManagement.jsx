@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+
 // Componente para a lista de utilizadores existentes
 const UserList = () => {
   const [users, setUsers] = useState([]);
@@ -8,13 +10,14 @@ const UserList = () => {
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, email, full_name, role')
-      .in('role', ['admin', 'caixa', 'garcom', 'cozinha']);
-    
-    if (error) console.error("Erro ao buscar utilizadores:", error);
-    else setUsers(data);
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/users`);
+        if (!response.ok) throw new Error("Falha ao buscar usuários.");
+        const data = await response.json();
+        setUsers(data);
+    } catch(error) {
+        console.error("Erro ao buscar utilizadores:", error);
+    }
     setLoading(false);
   };
 
@@ -23,18 +26,17 @@ const UserList = () => {
   }, []);
 
   const handleRoleChange = async (userId, newRole) => {
-    const { error } = await supabase.auth.admin.updateUserById(userId, {
-        user_metadata: { role: newRole }
-    });
-    
-    // Também atualiza a tabela de perfis para consistência
-    const { error: profileError } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
-
-    if (error || profileError) {
-      alert("Erro ao atualizar função: " + (error?.message || profileError?.message));
-    } else {
-      alert("Função atualizada com sucesso!");
-      fetchUsers();
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/users/${userId}/role`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: newRole })
+        });
+        if (!response.ok) throw new Error("Falha ao atualizar a função.");
+        alert("Função atualizada com sucesso!");
+        fetchUsers();
+    } catch (error) {
+        alert("Erro ao atualizar função: " + error.message);
     }
   };
 
@@ -88,16 +90,20 @@ const InviteUser = () => {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const temporaryPassword = Math.random().toString(36).slice(-8);
-    const { error } = await supabase.auth.signUp({
-      email: email,
-      password: temporaryPassword,
-      options: { data: { role: role, full_name: `Funcionário ${email.split('@')[0]}` } }
-    });
-    if (error) alert("Erro ao criar utilizador: " + error.message);
-    else {
-      alert(`Utilizador criado para ${email}! Um e-mail de confirmação com um link para definir a senha foi enviado.`);
-      setEmail('');
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/users/invite`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, role })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || "Falha ao convidar usuário.");
+        }
+        alert(`Utilizador convidado para ${email}! Um e-mail de confirmação foi enviado.`);
+        setEmail('');
+    } catch(error) {
+        alert("Erro ao criar utilizador: " + error.message);
     }
     setLoading(false);
   };

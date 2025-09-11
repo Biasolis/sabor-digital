@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+
 export default function MyOrders({ isOpen, onClose, session }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,9 +17,14 @@ export default function MyOrders({ isOpen, onClose, session }) {
 
   const fetchUserOrders = async () => {
       setLoading(true);
-      const { data, error } = await supabase.from('orders').select(`*, order_items(*, products(name))`).eq('user_id', session.user.id).order('created_at', { ascending: false });
-      if (error) console.error("Erro ao buscar pedidos:", error);
-      else setOrders(data);
+      try {
+          const response = await fetch(`${apiBackendUrl}/api/orders/user/${session.user.id}`);
+          if (!response.ok) throw new Error("Falha ao buscar pedidos do usuário.");
+          const data = await response.json();
+          setOrders(data);
+      } catch (error) {
+          console.error("Erro ao buscar pedidos:", error);
+      }
       setLoading(false);
   };
 
@@ -30,9 +37,17 @@ export default function MyOrders({ isOpen, onClose, session }) {
 
   const handleCancelOrder = async (orderId) => {
       if (window.confirm("Tem a certeza que deseja cancelar este pedido?")) {
-          const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId).eq('status', 'pending');
-          if (error) alert("Erro ao cancelar pedido: " + error.message);
-          else alert("Pedido cancelado com sucesso.");
+          try {
+            const response = await fetch(`${apiBackendUrl}/api/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'cancelled' })
+            });
+            if (!response.ok) throw new Error("Apenas pedidos pendentes podem ser cancelados.");
+            alert("Pedido cancelado com sucesso.");
+          } catch (error) {
+            alert("Erro ao cancelar pedido: " + error.message);
+          }
       }
   };
 

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import ChatbotEditorModal from './Chat/ChatbotEditorModal';
+import { useNotification } from '../contexts/NotificationContext';
 
-const backendUrl = import.meta.env.VITE_CHATBOT_BACKEND_URL || 'http://localhost:3002';
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+const chatbotBackendUrl = import.meta.env.VITE_CHATBOT_BACKEND_URL || 'http://localhost:3002';
 
 const Modal = ({ children, onClose }) => (
     <div className="cart-modal-overlay modal-overlay-centered" onClick={onClose}>
@@ -14,72 +17,89 @@ export default function ChatbotManager() {
     const [flows, setFlows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [currentFlow, setCurrentFlow] = useState(null);
+    const { addNotification } = useNotification();
 
     const fetchFlows = async () => {
         setLoading(true);
         try {
-            const response = await fetch(`${backendUrl}/flows`);
+            const response = await fetch(`${apiBackendUrl}/api/flows`);
+            if (!response.ok) throw new Error("Falha ao buscar fluxos.");
             const data = await response.json();
             setFlows(data);
         } catch (e) {
-            console.error("Erro ao buscar fluxos:", e);
+            addNotification("Erro ao buscar fluxos: " + e.message, 'error');
         }
         setLoading(false);
     };
 
-    useEffect(() => {
-        fetchFlows();
-    }, []);
+    useEffect(() => { fetchFlows(); }, []);
 
-    const handleOpenModal = (flow = null) => {
-        setCurrentFlow(flow);
-        setIsModalOpen(true);
-    };
+    const handleOpenModal = (flow = null) => { setCurrentFlow(flow); setIsModalOpen(true); };
+    const handleCloseModal = () => { setIsModalOpen(false); setCurrentFlow(null); };
+    const handleOpenEditor = (flow) => { setCurrentFlow(flow); setIsEditorOpen(true); };
+    const handleCloseEditor = () => { setIsEditorOpen(false); setCurrentFlow(null); };
 
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
-        setCurrentFlow(null);
-    };
-
-    const handleSaveFlow = async (event) => {
+    const handleSaveFlowSettings = async (event) => {
         event.preventDefault();
         const formData = new FormData(event.target);
-        const flowData = {
-            name: formData.get('name'),
-            description: formData.get('description'),
-            is_active: formData.get('is_active') === 'on',
-        };
+        const flowData = { name: formData.get('name'), description: formData.get('description'), is_active: formData.get('is_active') === 'on' };
+        const method = currentFlow?.id ? 'PUT' : 'POST';
+        const endpoint = currentFlow?.id ? `${apiBackendUrl}/api/flows/${currentFlow.id}` : `${apiBackendUrl}/api/flows`;
 
-        const method = currentFlow ? 'PUT' : 'POST';
-        const endpoint = currentFlow ? `${backendUrl}/flows/${currentFlow.id}` : `${backendUrl}/flows`;
+        try {
+            const response = await fetch(endpoint, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(flowData) });
+            if (!response.ok) throw new Error("Falha ao salvar configurações do fluxo.");
+            addNotification("Configurações salvas com sucesso!", 'success');
+            handleCloseModal();
+            fetchFlows();
+        } catch(e) {
+            addNotification(e.message, 'error');
+        }
+    };
+    
+    const handleSaveFlowStructure = async (flowId, flowState) => {
+        setLoading(true);
+        try {
+            const response = await fetch(`${apiBackendUrl}/api/flows/${flowId}/save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(flowState)
+            });
+            if (!response.ok) throw new Error("Falha ao salvar a estrutura do fluxo.");
 
-        await fetch(endpoint, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(flowData)
-        });
-        
-        handleCloseModal();
-        fetchFlows();
+            const current = flows.find(f => f.id === flowId);
+            if (current?.is_active) {
+                await fetch(`${chatbotBackendUrl}/reload-flow`, { method: 'POST' });
+            }
+
+            addNotification("Fluxo salvo com sucesso!", 'success');
+            handleCloseEditor();
+        } catch (e) {
+            addNotification("Erro ao salvar o fluxo: " + e.message, 'error');
+        }
+        setLoading(false);
     };
 
     const handleDeleteFlow = async (flowId) => {
         if (window.confirm("Tem a certeza que deseja excluir este chatbot?")) {
-            await fetch(`${backendUrl}/flows/${flowId}`, { method: 'DELETE' });
-            fetchFlows();
+            try {
+                const response = await fetch(`${apiBackendUrl}/api/flows/${flowId}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error("Falha ao excluir o fluxo.");
+                addNotification("Fluxo excluído com sucesso.", 'success');
+                fetchFlows();
+            } catch(e) {
+                addNotification(e.message, 'error');
+            }
         }
     };
     
-    const handleEditFlow = (flowId) => {
-        alert(`A abrir o editor para o fluxo ${flowId} (funcionalidade a ser implementada).`);
-    };
-
     return (
         <div>
             {isModalOpen && (
                 <Modal onClose={handleCloseModal}>
-                    <form onSubmit={handleSaveFlow}>
+                    <form onSubmit={handleSaveFlowSettings}>
                         <div className="cart-header">
                             <h2>{currentFlow ? 'Editar Chatbot' : 'Novo Chatbot'}</h2>
                             <button type="button" onClick={handleCloseModal}>&times;</button>
@@ -111,6 +131,14 @@ export default function ChatbotManager() {
                     </form>
                 </Modal>
             )}
+            
+            {isEditorOpen && (
+                <ChatbotEditorModal 
+                    flow={currentFlow}
+                    onClose={handleCloseEditor}
+                    onSaveFlow={handleSaveFlowStructure}
+                />
+            )}
 
             <div className="page-header">
                 <h4>Gestão de Chatbots</h4>
@@ -125,7 +153,7 @@ export default function ChatbotManager() {
                                 <td>{flow.name}</td>
                                 <td><span className={`status-badge ${flow.is_active ? 'delivered' : 'cancelled'}`}>{flow.is_active ? 'Ativo' : 'Inativo'}</span></td>
                                 <td className="actions-cell">
-                                    <button onClick={() => handleEditFlow(flow.id)}>Editar Fluxo</button>
+                                    <button onClick={() => handleOpenEditor(flow)}>Editar Fluxo</button>
                                     <button onClick={() => handleOpenModal(flow)}>Configurações</button>
                                     <button onClick={() => handleDeleteFlow(flow.id)}>Excluir</button>
                                 </td>

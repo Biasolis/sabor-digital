@@ -1,32 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-async function sendWhatsAppPromotion(promotion) {
-    const { data: settings } = await supabase.from('store_settings').select('whatsapp_instance_name, whatsapp_promo_template').eq('id', 1).single();
-    const evolutionApiUrl = import.meta.env.VITE_EVOLUTION_API_URL;
-    const evolutionApiKey = import.meta.env.VITE_EVOLUTION_API_KEY;
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+const whatsappBackendUrl = import.meta.env.VITE_WHATSAPP_BACKEND_URL || 'http://localhost:3001';
 
-    if (!evolutionApiUrl || !evolutionApiKey || !settings?.whatsapp_instance_name) {
-        return alert("As configurações da API do WhatsApp não foram encontradas ou estão incompletas.");
+
+// Esta função agora vive no backend. Vamos chamar a API.
+async function sendWhatsAppPromotion(promotion, token) {
+    if (!window.confirm(`Tem a certeza que deseja enviar esta promoção para todos os clientes elegíveis?`)) return;
+
+    try {
+        const response = await fetch(`${whatsappBackendUrl}/notify/promotion`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ promotion }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha ao iniciar envio.');
+        alert(result.message);
+    } catch (error) {
+        console.error("Falha ao acionar a notificação de promoção:", error);
+        alert("Erro ao enviar promoção: " + error.message);
     }
-    
-    const { data: customers, error } = await supabase.from('profiles').select('phone, full_name').eq('accepts_communications', true).not('phone', 'is', null);
-    if (error) return alert("Erro ao buscar clientes: " + error.message);
-    if (!customers || customers.length === 0) return alert("Nenhum cliente com permissão para receber mensagens foi encontrado.");
-
-    if (!window.confirm(`Tem a certeza que deseja enviar esta promoção para ${customers.length} cliente(s)?`)) return;
-
-    alert(`A iniciar o envio da promoção. Verifique a consola do navegador para o progresso.`);
-    
-    for(const customer of customers) {
-        let message = (settings.whatsapp_promo_template || 'Olá {cliente}! Nova promoção imperdível: *{promocao}*!')
-            .replace('{cliente}', customer.full_name)
-            .replace('{promocao}', promotion.name || promotion.title)
-            .replace('{preco_promocional}', new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(promotion.sale_price));
-        
-        console.log(`SIMULANDO ENVIO PROMO para ${customer.phone}: "${message}"`);
-    }
-    alert("Envio de promoções (simulado) concluído!");
 }
 
 
@@ -37,9 +35,14 @@ const ProductSales = () => {
 
     const fetchProducts = async () => {
         setLoading(true);
-        const { data, error } = await supabase.from('products').select('*').order('name');
-        if (error) console.error("Erro ao buscar produtos:", error);
-        else setProducts(data);
+        try {
+            const response = await fetch(`${apiBackendUrl}/api/products`);
+            if (!response.ok) throw new Error("Falha ao buscar produtos.");
+            const data = await response.json();
+            setProducts(data);
+        } catch(error) {
+            console.error("Erro ao buscar produtos:", error);
+        }
         setLoading(false);
     };
 
@@ -54,25 +57,42 @@ const ProductSales = () => {
             return;
         }
         
-        const { error } = await supabase.from('products')
-            .update({ is_on_sale: !isCurrentlyOnSale })
-            .eq('id', product.id);
-        
-        if(error) alert("Erro ao atualizar promoção: " + error.message);
-        else fetchProducts();
+        try {
+            const response = await fetch(`${apiBackendUrl}/api/products/${product.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_on_sale: !isCurrentlyOnSale })
+            });
+            if (!response.ok) throw new Error("Falha ao atualizar promoção.");
+            fetchProducts();
+        } catch (error) {
+            alert("Erro ao atualizar promoção: " + error.message);
+        }
     };
 
     const handleSalePriceChange = async (productId, newPrice) => {
-        const { error } = await supabase.from('products')
-            .update({ sale_price: newPrice === '' ? null : parseFloat(newPrice) })
-            .eq('id', productId);
-        
-        if(error) alert("Erro ao atualizar preço: " + error.message);
-        else {
+        try {
+            const response = await fetch(`${apiBackendUrl}/api/products/${productId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sale_price: newPrice === '' ? null : parseFloat(newPrice) })
+            });
+            if (!response.ok) throw new Error("Falha ao atualizar preço.");
             setProducts(products.map(p => p.id === productId ? {...p, sale_price: newPrice} : p));
+        } catch (error) {
+            alert("Erro ao atualizar preço: " + error.message);
         }
     };
     
+    const handleSendPromo = async (product) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            alert("Sessão inválida. Por favor, faça login novamente.");
+            return;
+        }
+        await sendWhatsAppPromotion(product, session.access_token);
+    };
+
     if (loading) return <p>A carregar produtos...</p>;
 
     return (
@@ -104,7 +124,7 @@ const ProductSales = () => {
                                     </label>
                                 </td>
                                  <td className="actions-cell">
-                                    {product.is_on_sale && <button onClick={() => sendWhatsAppPromotion(product)}>Enviar via WhatsApp</button>}
+                                    {product.is_on_sale && <button onClick={() => handleSendPromo(product)}>Enviar via WhatsApp</button>}
                                 </td>
                             </tr>
                         ))}
@@ -124,9 +144,14 @@ const BannerSales = () => {
 
   const fetchPromotions = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('promotions').select('*').order('created_at', { ascending: false });
-    if (error) console.error("Erro ao buscar promoções:", error);
-    else setPromotions(data);
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/promotions`);
+        if (!response.ok) throw new Error("Falha ao buscar banners.");
+        const data = await response.json();
+        setPromotions(data);
+    } catch(error) {
+        console.error("Erro ao buscar promoções:", error);
+    }
     setLoading(false);
   };
 
@@ -147,43 +172,71 @@ const BannerSales = () => {
       return;
     }
     setUploading(true);
-    const fileName = `banner_${Date.now()}`;
-    const { error: uploadError } = await supabase.storage.from('promotion-banners').upload(fileName, newPromo.imageFile);
-    if (uploadError) {
-      alert("Erro no upload do banner: " + uploadError.message);
-      setUploading(false);
-      return;
-    }
+    let imageUrl = '';
+    try {
+        const fileName = `banner_${Date.now()}`;
+        const { error: uploadError } = await supabase.storage.from('promotion-banners').upload(fileName, newPromo.imageFile);
+        if (uploadError) throw uploadError;
 
-    const { data: { publicUrl } } = supabase.storage.from('promotion-banners').getPublicUrl(fileName);
-    const { error: dbError } = await supabase.from('promotions').insert({ title: newPromo.title, image_url: publicUrl });
-    if (dbError) {
-      alert("Erro ao salvar promoção: " + dbError.message);
-    } else {
-      alert("Promoção adicionada com sucesso!");
-      setNewPromo({ title: '', imageFile: null });
-      document.getElementById('image-file-input').value = "";
-      fetchPromotions();
+        const { data: { publicUrl } } = supabase.storage.from('promotion-banners').getPublicUrl(fileName);
+        imageUrl = publicUrl;
+
+        const response = await fetch(`${apiBackendUrl}/api/promotions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newPromo.title, image_url: imageUrl })
+        });
+        if (!response.ok) throw new Error("Falha ao salvar o banner no banco de dados.");
+
+        alert("Promoção adicionada com sucesso!");
+        setNewPromo({ title: '', imageFile: null });
+        document.getElementById('image-file-input').value = "";
+        fetchPromotions();
+    } catch (error) {
+        alert("Erro: " + error.message);
     }
     setUploading(false);
   };
   
   const handleDelete = async (promo) => {
     if (window.confirm("Tem a certeza que deseja apagar este banner?")) {
-        const fileName = promo.image_url.split('/').pop();
-        const { error: storageError } = await supabase.storage.from('promotion-banners').remove([fileName]);
-        if(storageError) { alert("Erro ao apagar imagem do armazenamento: " + storageError.message); return; }
+        try {
+            const fileName = promo.image_url.split('/').pop();
+            const { error: storageError } = await supabase.storage.from('promotion-banners').remove([fileName]);
+            if(storageError) throw storageError;
 
-        const { error: dbError } = await supabase.from('promotions').delete().eq('id', promo.id);
-        if(dbError) { alert("Erro ao apagar registo da promoção: " + dbError.message); }
-        else { alert("Promoção apagada com sucesso!"); fetchPromotions(); }
+            const response = await fetch(`${apiBackendUrl}/api/promotions/${promo.id}`, { method: 'DELETE' });
+            if(!response.ok) throw new Error("Falha ao apagar o registro do banner.");
+
+            alert("Promoção apagada com sucesso!"); 
+            fetchPromotions();
+        } catch (error) {
+            alert("Erro ao apagar banner: " + error.message);
+        }
     }
   };
 
   const toggleActive = async (promo) => {
-      const { error } = await supabase.from('promotions').update({ is_active: !promo.is_active }).eq('id', promo.id);
-      if(error) { alert("Erro ao alterar o estado: " + error.message); }
-      else { fetchPromotions(); }
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/promotions/${promo.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: !promo.is_active })
+        });
+        if (!response.ok) throw new Error("Falha ao alterar o estado do banner.");
+        fetchPromotions();
+    } catch(error) {
+        alert("Erro ao alterar o estado: " + error.message);
+    }
+  };
+  
+  const handleSendPromo = async (promotion) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+        alert("Sessão inválida. Por favor, faça login novamente.");
+        return;
+    }
+    await sendWhatsAppPromotion(promotion, session.access_token);
   };
 
   return (
@@ -211,7 +264,7 @@ const BannerSales = () => {
                 </button>
               </td>
               <td className="actions-cell">
-                  {promo.is_active && <button onClick={() => sendWhatsAppPromotion(promo)}>Enviar via WhatsApp</button>}
+                  {promo.is_active && <button onClick={() => handleSendPromo(promo)}>Enviar via WhatsApp</button>}
                   <button onClick={() => handleDelete(promo)}>Apagar</button>
               </td>
             </tr>

@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { useNotification } from '../contexts/NotificationContext'; // 1. Importar o hook de notificação
+
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
 
 export default function ProductManagement() {
   const [products, setProducts] = useState([]);
@@ -9,20 +12,27 @@ export default function ProductManagement() {
   const [isEditing, setIsEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imageFile, setImageFile] = useState(null);
-  
+  const { addNotification } = useNotification(); // 2. Inicializar o hook
+
   const [currentProduct, setCurrentProduct] = useState({
     id: null, name: '', description: '', price: '', category_id: '', image_url: ''
   });
 
   const fetchData = async () => {
     setLoading(true);
-    const { data: productsData, error: productsError } = await supabase.from('products').select('*');
-    if (productsError) console.error('Erro ao buscar produtos:', productsError);
-    else setProducts(productsData);
-
-    const { data: categoriesData, error: categoriesError } = await supabase.from('categories').select('*');
-    if (categoriesError) console.error('Erro ao buscar categorias:', categoriesError);
-    else setCategories(categoriesData);
+    try {
+        const [productsRes, categoriesRes] = await Promise.all([
+            fetch(`${apiBackendUrl}/api/products`),
+            fetch(`${apiBackendUrl}/api/categories`),
+        ]);
+        const productsData = await productsRes.json();
+        const categoriesData = await categoriesRes.json();
+        setProducts(productsData);
+        setCategories(categoriesData);
+    } catch (error) {
+        console.error('Erro ao buscar dados:', error);
+        addNotification('Erro ao carregar dados do servidor.', 'error'); // 3. Usar notificação para erros
+    }
     setLoading(false);
   };
 
@@ -57,12 +67,14 @@ export default function ProductManagement() {
 
   const handleDelete = async (productId) => {
     if (window.confirm('Tem certeza que deseja apagar este produto?')) {
-      const { error } = await supabase.from('products').delete().eq('id', productId);
-      if (error) alert('Erro ao apagar produto:', error.message);
-      else {
-        alert('Produto apagado com sucesso!');
-        fetchData();
-      }
+        try {
+            const response = await fetch(`${apiBackendUrl}/api/products/${productId}`, { method: 'DELETE' });
+            if (!response.ok) throw new Error('Falha ao apagar produto.');
+            addNotification('Produto apagado com sucesso!', 'success'); // 3. Usar notificação para sucesso
+            fetchData();
+        } catch (error) {
+            addNotification('Erro ao apagar produto: ' + error.message, 'error'); // 3. Usar notificação para erros
+        }
     }
   };
 
@@ -72,7 +84,6 @@ export default function ProductManagement() {
     
     let imageUrl = currentProduct.image_url;
 
-    // Se um novo arquivo de imagem foi selecionado, faz o upload
     if (imageFile) {
       const fileName = `${Date.now()}_${imageFile.name}`;
       const { error: uploadError } = await supabase.storage
@@ -80,12 +91,11 @@ export default function ProductManagement() {
         .upload(fileName, imageFile);
       
       if (uploadError) {
-        alert("Erro no upload da imagem: " + uploadError.message);
+        addNotification("Erro no upload da imagem: " + uploadError.message, 'error'); // 3. Usar notificação para erros
         setUploading(false);
         return;
       }
 
-      // Obtém o URL público da imagem
       const { data } = supabase.storage
         .from('product-images')
         .getPublicUrl(fileName);
@@ -93,28 +103,32 @@ export default function ProductManagement() {
       imageUrl = data.publicUrl;
     }
     
-    // Prepara os dados do produto para salvar no banco de dados
     const productData = {
         name: currentProduct.name, 
         description: currentProduct.description, 
         price: currentProduct.price,
         category_id: currentProduct.category_id,
-        image_url: imageUrl // Usa o novo URL ou o antigo
+        image_url: imageUrl
     };
 
-    let error;
-    if (isEditing) {
-      ({ error } = await supabase.from('products').update(productData).eq('id', currentProduct.id));
-    } else {
-      ({ error } = await supabase.from('products').insert([productData]));
-    }
+    try {
+        const url = isEditing ? `${apiBackendUrl}/api/products/${currentProduct.id}` : `${apiBackendUrl}/api/products`;
+        const method = isEditing ? 'PUT' : 'POST';
 
-    if (error) {
-      alert('Erro ao salvar produto: ' + error.message);
-    } else {
-      alert(`Produto ${isEditing ? 'atualizado' : 'criado'} com sucesso!`);
-      setShowForm(false);
-      fetchData();
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(productData),
+        });
+
+        if (!response.ok) throw new Error(`Falha ao ${isEditing ? 'atualizar' : 'criar'} produto.`);
+        
+        addNotification(`Produto ${isEditing ? 'atualizado' : 'criado'} com sucesso!`, 'success'); // 3. Usar notificação para sucesso
+        setShowForm(false);
+        fetchData();
+
+    } catch (error) {
+        addNotification('Erro ao salvar produto: ' + error.message, 'error'); // 3. Usar notificação para erros
     }
     setUploading(false);
   };

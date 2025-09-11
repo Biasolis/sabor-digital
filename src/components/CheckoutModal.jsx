@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { supabase } from '../lib/supabaseClient';
+
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
 
 export default function CheckoutModal({ isOpen, onClose, cart, session, storeSettings, onOrderPlaced, profile }) {
   const [deliveryType, setDeliveryType] = useState('delivery');
@@ -7,7 +8,6 @@ export default function CheckoutModal({ isOpen, onClose, cart, session, storeSet
   const [changeFor, setChangeFor] = useState('');
   const [placingOrder, setPlacingOrder] = useState(false);
 
-  // CORRIGIDO: O cálculo do subtotal agora verifica se o produto está em promoção
   const subtotal = useMemo(() => cart.reduce((acc, item) => acc + (item.is_on_sale ? item.sale_price : item.price) * item.quantity, 0), [cart]);
   const deliveryFee = deliveryType === 'delivery' ? (storeSettings?.delivery_fee || 0) : 0;
   const total = subtotal + deliveryFee;
@@ -20,37 +20,43 @@ export default function CheckoutModal({ isOpen, onClose, cart, session, storeSet
     
     setPlacingOrder(true);
 
-    const { data: orderData, error: orderError } = await supabase.from('orders').insert({
-        user_id: session.user.id,
-        contact_id: profile.contact_id, // Adiciona o ID do contato ao pedido
-        total_price: total, 
-        status: 'pending',
-        delivery_type: deliveryType, 
-        payment_method: paymentMethod,
-        change_for: paymentMethod === 'cash' ? changeFor : null
-    }).select().single();
+    const orderPayload = {
+        order: {
+            user_id: session.user.id,
+            contact_id: profile.contact_id,
+            total_price: total, 
+            status: 'pending',
+            delivery_type: deliveryType, 
+            payment_method: paymentMethod,
+            change_for: paymentMethod === 'cash' ? changeFor : null
+        },
+        items: cart.map(item => ({
+            product_id: item.id, 
+            quantity: item.quantity, 
+            price: item.is_on_sale ? item.sale_price : item.price 
+        }))
+    };
 
-    if (orderError) {
-        alert('Erro ao criar o pedido: ' + orderError.message);
-        setPlacingOrder(false); return;
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/orders`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(orderPayload)
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || "Falha ao criar o pedido.");
+        }
+
+        alert('Pedido realizado com sucesso!');
+        onOrderPlaced();
+
+    } catch (error) {
+        alert('Erro ao criar o pedido: ' + error.message);
+    } finally {
+        setPlacingOrder(false);
     }
-
-    // CORRIGIDO: Garante que o preço guardado no item do pedido é o preço correto (promocional ou não)
-    const orderItems = cart.map(item => ({
-        order_id: orderData.id, 
-        product_id: item.id, 
-        quantity: item.quantity, 
-        price: item.is_on_sale ? item.sale_price : item.price 
-    }));
-    const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-    if (itemsError) {
-        alert('Erro ao salvar os itens do pedido: ' + itemsError.message);
-        setPlacingOrder(false); return;
-    }
-
-    alert('Pedido realizado com sucesso!');
-    onOrderPlaced();
-    setPlacingOrder(false);
   };
 
   if (!isOpen) return null;

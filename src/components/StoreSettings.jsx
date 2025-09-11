@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-// A URL do seu backend local
-const backendUrl = import.meta.env.VITE_WHATSAPP_BACKEND_URL || 'http://localhost:3001';
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
 
 export default function StoreSettings({ onSettingsUpdate }) {
   const [settings, setSettings] = useState({ store_name: '', store_address: '', phone_number: '', delivery_fee: 0, delivery_time_estimate: '', logo_url: '', primary_color: '#f59e0b', secondary_color: '#4f46e5', show_promotions_section: true, is_open: false });
@@ -13,11 +12,15 @@ export default function StoreSettings({ onSettingsUpdate }) {
   useEffect(() => {
     const fetchSettings = async () => {
       setLoading(true);
-      const { data, error } = await supabase.from('store_settings').select('*').eq('id', 1).single();
-      if (error && error.code !== 'PGRST116') {
-        console.error("Erro ao buscar configurações:", error);
-      } else if (data) {
-        setSettings(data);
+      try {
+          const response = await fetch(`${apiBackendUrl}/api/settings`);
+          if (!response.ok && response.status !== 404) throw new Error("Falha ao buscar configurações");
+          const data = await response.json();
+          if (data) {
+              setSettings(data);
+          }
+      } catch (error) {
+          console.error("Erro ao buscar configurações:", error);
       }
       setLoading(false);
     };
@@ -40,16 +43,9 @@ export default function StoreSettings({ onSettingsUpdate }) {
     setSettings(optimisticSettings);
 
     try {
-      // Pega a sessão atual para obter o token de autenticação
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Utilizador não autenticado.");
-
-      const response = await fetch(`${backendUrl}/update-store-status`, {
+      const response = await fetch(`${apiBackendUrl}/api/settings/status`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_open: newStatus }),
       });
 
@@ -80,13 +76,20 @@ export default function StoreSettings({ onSettingsUpdate }) {
 
     const { is_open, last_opened_at, ...savableSettings } = settings;
 
-    const { data, error } = await supabase.from('store_settings').upsert({ ...savableSettings, id: 1, logo_url: logoUrl }).select().single();
-    if (error) {
-      alert("Erro ao salvar configurações: " + error.message);
-    } else {
-      alert("Configurações salvas com sucesso!");
-      onSettingsUpdate(data);
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...savableSettings, id: 1, logo_url: logoUrl })
+        });
+        if (!response.ok) throw new Error("Falha ao salvar configurações.");
+        const data = await response.json();
+        alert("Configurações salvas com sucesso!");
+        onSettingsUpdate(data);
+    } catch(error) {
+        alert("Erro ao salvar configurações: " + error.message);
     }
+
     setLoading(false); setUploading(false);
   };
 
@@ -112,7 +115,6 @@ export default function StoreSettings({ onSettingsUpdate }) {
       <h4>Informações da Loja</h4>
       <p>Edite os dados e a aparência da sua loja.</p>
       <form onSubmit={handleSubmit} className="product-form" style={{marginTop: '1rem'}}>
-        {/* O resto do formulário continua igual... */}
         <div className="form-group"><label>Nome da Loja</label><input type="text" name="store_name" value={settings.store_name || ''} onChange={handleInputChange} /></div>
         <div className="form-group"><label>Logótipo</label><input type="file" name="logo" onChange={handleLogoChange} accept="image/*" /></div>
         <div className="form-group"><label>Cor Primária</label><input type="color" name="primary_color" value={settings.primary_color || '#f59e0b'} onChange={handleInputChange} /></div>

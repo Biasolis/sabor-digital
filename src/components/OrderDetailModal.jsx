@@ -1,12 +1,16 @@
 import React from 'react';
-import { supabase } from '../lib/supabaseClient';
 
-// Esta função agora vive no backend. Vamos chamar a API.
-async function triggerWhatsAppStatusUpdate(orderId) {
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+const whatsappBackendUrl = import.meta.env.VITE_WHATSAPP_BACKEND_URL || 'http://localhost:3001';
+
+async function triggerWhatsAppStatusUpdate(orderId, token) {
     try {
-        await fetch('http://localhost:3001/notify/order-update', {
+        await fetch(`${whatsappBackendUrl}/notify/order-update`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ orderId }),
         });
     } catch (error) {
@@ -18,23 +22,31 @@ export default function OrderDetailModal({ isOpen, onClose, order, onStatusChang
   if (!isOpen || !order) return null;
 
   const handleStatusChange = async (newStatus) => {
-    const { data, error } = await supabase
-      .from('orders')
-      .update({ status: newStatus })
-      .eq('id', order.id)
-      .select()
-      .single();
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/orders/${order.id}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        });
 
-    if (error) {
-      alert("Erro ao atualizar status: " + error.message);
-    } else {
-      onStatusChange(); // Atualiza a lista de pedidos na UI
-      onClose(); // Fecha o modal
-      
-      // Aciona a notificação através do nosso backend
-      if (data) {
-        triggerWhatsAppStatusUpdate(data.id);
-      }
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || "Falha ao atualizar status.");
+        }
+        
+        const data = await response.json();
+        onStatusChange(); 
+        onClose(); 
+        
+        // Aciona a notificação através do backend do WhatsApp
+        if (data) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                triggerWhatsAppStatusUpdate(data.id, session.access_token);
+            }
+        }
+    } catch (error) {
+        alert("Erro ao atualizar status: " + error.message);
     }
   };
 
@@ -44,7 +56,7 @@ export default function OrderDetailModal({ isOpen, onClose, order, onStatusChang
         <div className="cart-header"><h2>Detalhes do Pedido #{order.id}</h2><button onClick={onClose}>&times;</button></div>
         <div className="cart-body">
           <div className="order-detail-grid">
-            <div className="order-detail-section"><h4>Cliente</h4><p><strong>Nome:</strong> {order.profiles?.full_name || order.in_person_identifier || 'N/A'}</p><p><strong>Telefone:</strong> {order.profiles?.phone || 'Não informado'}</p><p><strong>CPF:</strong> {order.profiles?.cpf || 'Não informado'}</p><p><strong>Morada:</strong> {order.profiles?.address ? `${order.profiles.address}, ${order.profiles.number}` : 'Retirada no local'}</p></div>
+            <div className="order-detail-section"><h4>Cliente</h4><p><strong>Nome:</strong> {order.contacts?.full_name || order.in_person_identifier || 'N/A'}</p><p><strong>Telefone:</strong> {order.contacts?.phone || 'Não informado'}</p><p><strong>CPF:</strong> {order.contacts?.cpf || 'Não informado'}</p><p><strong>Morada:</strong> {order.contacts?.address ? `${order.contacts.address}, ${order.contacts.number}` : 'Retirada no local'}</p></div>
             <div className="order-detail-section"><h4>Pedido</h4><p><strong>Tipo:</strong> {order.delivery_type === 'delivery' ? 'Entrega' : (order.delivery_type === 'pickup' ? 'Retirada' : 'No Local')}</p><p><strong>Pagamento:</strong> {order.payment_method}</p>{order.change_for && <p><strong>Troco para:</strong> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.change_for)}</p>}<p><strong>Data:</strong> {new Date(order.created_at).toLocaleString('pt-PT')}</p></div>
           </div>
           <div className="order-detail-section" style={{marginTop: '2rem'}}>

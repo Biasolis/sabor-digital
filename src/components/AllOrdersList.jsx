@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
 
 export default function AllOrdersList() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Mapeamento de status para texto e classe CSS para os badges
   const statusMap = {
     pending: { text: "Pendente", class: "pending" },
     accepted: { text: "Em Preparo", class: "accepted" },
@@ -17,30 +17,13 @@ export default function AllOrdersList() {
   useEffect(() => {
     const fetchAllOrders = async () => {
       setLoading(true);
-
-      // 1. Busca a data da última abertura da loja
-      const { data: settings } = await supabase
-        .from('store_settings')
-        .select('last_opened_at')
-        .eq('id', 1)
-        .single();
-      
-      let query = supabase
-        .from('orders')
-        .select(`*, contacts ( full_name )`)
-        .order('created_at', { ascending: false });
-
-      // 2. Se houver uma data, filtra os pedidos a partir dela
-      if (settings?.last_opened_at) {
-        query = query.gte('created_at', settings.last_opened_at);
-      }
-
-      const { data, error } = await query;
-      
-      if (error) {
-        console.error("Erro ao buscar todos os pedidos:", error);
-      } else {
+      try {
+        const response = await fetch(`${apiBackendUrl}/api/orders/allday`);
+        if (!response.ok) throw new Error('Falha ao buscar os pedidos do dia.');
+        const data = await response.json();
         setOrders(data);
+      } catch (error) {
+        console.error("Erro ao buscar todos os pedidos:", error);
       }
       setLoading(false);
     };

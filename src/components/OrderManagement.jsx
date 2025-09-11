@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import OrderDetailModal from './OrderDetailModal';
 
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+
 export default function OrderManagement() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,28 +11,16 @@ export default function OrderManagement() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // A função para buscar os pedidos agora só busca os que estão com status 'pending' ou 'accepted'
   const fetchOpenOrders = async () => {
-    const { data: settings } = await supabase
-      .from('store_settings')
-      .select('last_opened_at')
-      .eq('id', 1)
-      .single();
-
-    let query = supabase
-      .from('orders')
-      .select(`*, contacts ( * ), order_items ( *, products ( * ) )`)
-      .in('status', ['pending', 'accepted']) // <-- FILTRO PRINCIPAL AQUI
-      .order('created_at', { ascending: false });
-    
-    if (settings?.last_opened_at) {
-        query = query.gte('created_at', settings.last_opened_at);
+    setLoading(true);
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/orders/open`);
+        if (!response.ok) throw new Error('Falha ao buscar pedidos em aberto.');
+        const data = await response.json();
+        setOrders(data);
+    } catch (error) {
+        console.error("Erro ao buscar pedidos em aberto:", error);
     }
-  
-    const { data, error } = await query;
-
-    if (error) console.error("Erro ao buscar pedidos em aberto:", error);
-    else setOrders(data);
     setLoading(false);
   };
 

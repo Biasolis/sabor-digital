@@ -36,6 +36,8 @@ const TagIcon = (props) => (<svg {...props} xmlns="http://www.w3.org/2000/svg" w
 const ChefHatIcon = (props) => (<svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21a2 2 0 0 1-2-2V12a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2Z"/><path d="M5 10V8c0-3.87 3.13-7 7-7s7 3.13 7 7v2"/><path d="M12 10v11"/></svg>);
 const MessageCircleIcon = (props) => (<svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>);
 
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+
 // --- Componente de Autenticação em Modal ---
 const AuthModal = ({ isOpen, onClose, storeName }) => {
     const [loading, setLoading] = useState(false); const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
@@ -53,9 +55,7 @@ const AdminDashboard = ({ storeName, session, logoUrl, storeSettings, onSettings
         switch(activeTab) { 
             case 'orders': return <OrdersDashboard />; 
             case 'cozinha': return <KitchenDisplay session={session} />;
-            // CORRIGIDO: Garante que a aba 'whatsapp_chat' renderize o componente de Chat
             case 'whatsapp_chat': return <WhatsAppDashboard session={session} />;
-            // CORRIGIDO: Garante que a aba 'whatsapp_config' renderize o componente de Configuração
             case 'whatsapp_config': return <WhatsAppConfigDashboard />;
             case 'menu': return <MenuDashboard />; 
             case 'promotions': return <PromotionManagement />; 
@@ -68,7 +68,7 @@ const AdminDashboard = ({ storeName, session, logoUrl, storeSettings, onSettings
             default: return null; 
         } 
     };
-  return ( <div className="admin-layout"> <aside className="sidebar"> <div> <div className="sidebar-header">{logoUrl ? <img src={logoUrl} alt="Logo" /> : <UtensilsCrossedIcon style={{height: '2rem', width: '2rem'}} />}<span>{storeName}</span></div> <div style={{padding: '0 1.5rem 1rem'}}> {storeSettings?.is_open ? (<span style={{color: '#166534', backgroundColor: '#dcfce7', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '600'}}>Aberto</span>) : (<span style={{color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '600'}}>Fechado</span>)} </div> </div> <nav className="sidebar-nav"> <button onClick={() => setActiveTab('orders')} className={activeTab === 'orders' ? 'active' : ''}><ClipboardListIcon /> Pedidos</button> <button onClick={() => setActiveTab('cozinha')} className={activeTab === 'cozinha' ? 'active' : ''}><ChefHatIcon /> Cozinha</button> <button onClick={() => setActiveTab('whatsapp_chat')} className={activeTab === 'whatsapp_chat' ? 'active' : ''}><MessageCircleIcon /> WhatsApp Chat</button> <button onClick={() => setActiveTab('whatsapp_config')} className={activeTab === 'whatsapp_config' ? 'active' : ''}><SettingsIcon /> WhatsApp Config</button> <button onClick={() => setActiveTab('pdv')} className={activeTab === 'pdv' ? 'active' : ''}><HardDriveIcon /> PDV</button> <button onClick={() => setActiveTab('menu')} className={activeTab === 'menu' ? 'active' : ''}><MenuIcon /> Cardápio</button> <button onClick={() => setActiveTab('promotions')} className={activeTab === 'promotions' ? 'active' : ''}><TagIcon /> Promoções</button> <button onClick={() => setActiveTab('customers')} className={activeTab === 'customers' ? 'active' : ''}><Users2Icon /> Clientes</button> <button onClick={() => setActiveTab('reports')} className={activeTab === 'reports' ? 'active' : ''}><BarChartIcon /> Relatórios</button> <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'active' : ''}><UsersIcon /> Equipa</button> <button onClick={() => setActiveTab('profile')} className={activeTab === 'profile' ? 'active' : ''}><UserIcon /> Meu Perfil</button> <button onClick={() => setActiveTab('settings')} className={activeTab === 'settings' ? 'active' : ''}><SettingsIcon /> Configurações</button> </nav> <div className="sidebar-footer"><button onClick={handleLogout}><LogOutIcon /> Sair</button></div> </aside> <main className="main-content">{renderContent()}</main> </div> );
+  return ( <div className="admin-layout"> <aside className="sidebar"> <div> <div className="sidebar-header">{logoUrl ? <img src={logoUrl} alt="Logo" /> : <UtensilsCrossedIcon style={{height: '2rem', width: '2rem'}} />}<span>{storeName}</span></div> <div style={{padding: '0 1.5rem 1rem'}}> {storeSettings?.is_open ? (<span style={{color: '#166534', backgroundColor: '#dcfce7', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.8rem', fontWeight: '600'}}>Aberto</span>) : (<span style={{color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.8rem', fontWeight: '600'}}>Fechado</span>)} </div> </div> <nav className="sidebar-nav"> <button onClick={() => setActiveTab('orders')} className={activeTab === 'orders' ? 'active' : ''}><ClipboardListIcon /> Pedidos</button> <button onClick={() => setActiveTab('cozinha')} className={activeTab === 'cozinha' ? 'active' : ''}><ChefHatIcon /> Cozinha</button> <button onClick={() => setActiveTab('whatsapp_chat')} className={activeTab === 'whatsapp_chat' ? 'active' : ''}><MessageCircleIcon /> WhatsApp Chat</button> <button onClick={() => setActiveTab('whatsapp_config')} className={activeTab === 'whatsapp_config' ? 'active' : ''}><SettingsIcon /> WhatsApp Config</button> <button onClick={() => setActiveTab('pdv')} className={activeTab === 'pdv' ? 'active' : ''}><HardDriveIcon /> PDV</button> <button onClick={() => setActiveTab('menu')} className={activeTab === 'menu' ? 'active' : ''}><MenuIcon /> Cardápio</button> <button onClick={() => setActiveTab('promotions')} className={activeTab === 'promotions' ? 'active' : ''}><TagIcon /> Promoções</button> <button onClick={() => setActiveTab('customers')} className={activeTab === 'customers' ? 'active' : ''}><Users2Icon /> Clientes</button> <button onClick={() => setActiveTab('reports')} className={activeTab === 'reports' ? 'active' : ''}><BarChartIcon /> Relatórios</button> <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'active' : ''}><UsersIcon /> Equipa</button> <button onClick={() => setActiveTab('profile')} className={activeTab === 'profile' ? 'active' : ''}><UserIcon /> Meu Perfil</button> <button onClick={() => setActiveTab('settings')} className={activeTab === 'settings' ? 'active' : ''}><SettingsIcon /> Configurações</button> </nav> <div className="sidebar-footer"><button onClick={handleLogout}><LogOutIcon /> Sair</button></div> </aside> <main className="main-content">{renderContent()}</main> </div> );
 };
 
 // --- Visão do Caixa ---
@@ -77,7 +77,7 @@ const CaixaDashboard = ({ storeName, session, logoUrl }) => {
     const handleLogout = async () => { await supabase.auth.signOut(); };
     const renderContent = () => {
         if (activeView === 'pdv') return <POSView session={session} />;
-        if (activeView === 'orders') return <OrderManagement />;
+        if (activeView === 'orders') return <OrdersDashboard />;
         if (activeView === 'cozinha') return <KitchenDisplay session={session} />;
         return null;
     }
@@ -116,14 +116,21 @@ const MainView = ({ session, profile, storeName, logoUrl, storeSettings, setShow
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
-            const [productsResponse, categoriesResponse, promotionsResponse] = await Promise.all([ 
-                supabase.from('products').select('*'), 
-                supabase.from('categories').select('*'),
-                supabase.from('promotions').select('*').eq('is_active', true)
-            ]);
-            if (productsResponse.data) setProducts(productsResponse.data);
-            if (categoriesResponse.data) setCategories(categoriesResponse.data);
-            if (promotionsResponse.data) setPromotions(promotionsResponse.data);
+            try {
+                const [productsRes, categoriesRes, promotionsRes] = await Promise.all([
+                    fetch(`${apiBackendUrl}/api/products`),
+                    fetch(`${apiBackendUrl}/api/categories`),
+                    fetch(`${apiBackendUrl}/api/promotions/active`),
+                ]);
+                const productsData = await productsRes.json();
+                const categoriesData = await categoriesRes.json();
+                const promotionsData = await promotionsRes.json();
+                setProducts(productsData);
+                setCategories(categoriesData);
+                setPromotions(promotionsData);
+            } catch (error) {
+                console.error("Erro ao buscar dados públicos:", error);
+            }
             setLoading(false);
         };
         fetchData();
@@ -276,6 +283,7 @@ export default function App() {
       setProfile(null); 
       return; 
     }
+    // A busca de perfil agora também pode ir para o backend se ficar mais complexa
     const { data, error } = await supabase
       .from('profiles')
       .select('*, contacts(*)')
@@ -296,19 +304,26 @@ export default function App() {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       
-      const { data: settingsData } = await supabase.from('store_settings').select('*').eq('id', 1).single();
-      const currentSettings = settingsData || { store_name: "Sabor Digital", primary_color: '#f59e0b', secondary_color: '#4f46e5' };
-      setStoreSettings(currentSettings);
+      try {
+          const response = await fetch(`${apiBackendUrl}/api/settings`);
+          const settingsData = await response.json();
+          const currentSettings = settingsData || { store_name: "Sabor Digital", primary_color: '#f59e0b', secondary_color: '#4f46e5' };
+          setStoreSettings(currentSettings);
+
+          if (settingsData) {
+            document.documentElement.style.setProperty('--primary-color', settingsData.primary_color);
+            document.documentElement.style.setProperty('--primary-color-hover', `${settingsData.primary_color}dd`);
+            document.documentElement.style.setProperty('--secondary-color', settingsData.secondary_color);
+            document.documentElement.style.setProperty('--secondary-color-hover', `${settingsData.secondary_color}dd`);
+          }
+      } catch (error) {
+          console.error("Erro ao buscar configurações da loja:", error);
+          const defaultSettings = { store_name: "Sabor Digital", primary_color: '#f59e0b', secondary_color: '#4f46e5' };
+          setStoreSettings(defaultSettings);
+      }
       
       if (session) {
         await fetchProfile(session);
-      }
-
-      if (settingsData) {
-        document.documentElement.style.setProperty('--primary-color', settingsData.primary_color);
-        document.documentElement.style.setProperty('--primary-color-hover', `${settingsData.primary_color}dd`);
-        document.documentElement.style.setProperty('--secondary-color', settingsData.secondary_color);
-        document.documentElement.style.setProperty('--secondary-color-hover', `${settingsData.secondary_color}dd`);
       }
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {

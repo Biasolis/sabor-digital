@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
+const apiBackendUrl = import.meta.env.VITE_API_BACKEND_URL || 'http://localhost:3003';
+
 export default function CustomerManagement() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,22 +24,13 @@ export default function CustomerManagement() {
 
   const fetchCustomers = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*, contacts(*)')
-      .eq('role', 'customer')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error("Erro ao buscar clientes:", error);
-    } else {
-      const formattedCustomers = data.map(p => ({
-        id: p.id,
-        contact_id: p.contact_id,
-        email: p.contacts?.email,
-        ...p.contacts
-      }));
-      setCustomers(formattedCustomers);
+    try {
+        const response = await fetch(`${apiBackendUrl}/api/customers`);
+        if (!response.ok) throw new Error("Falha ao buscar clientes");
+        const data = await response.json();
+        setCustomers(data);
+    } catch (error) {
+        console.error("Erro ao buscar clientes:", error);
     }
     setLoading(false);
   };
@@ -69,16 +62,14 @@ export default function CustomerManagement() {
 
   const handleDelete = async (customer) => {
     if (window.confirm(`Tem a certeza que deseja apagar o cliente ${customer.full_name}? Esta ação não pode ser desfeita e irá remover o seu login.`)) {
-      const { data, error } = await supabase.functions.invoke('delete-user', {
-        body: { user_id: customer.id },
-      });
-
-      if (error) {
-        alert('Erro ao apagar cliente: ' + error.message);
-      } else {
-        alert('Cliente apagado com sucesso.');
-        fetchCustomers();
-      }
+        try {
+            const response = await fetch(`${apiBackendUrl}/api/customers/${customer.id}`, { method: 'DELETE' });
+            if (!response.ok) throw new Error("Falha ao apagar cliente.");
+            alert('Cliente apagado com sucesso.');
+            fetchCustomers();
+        } catch (error) {
+            alert('Erro ao apagar cliente: ' + error.message);
+        }
     }
   };
   
@@ -87,70 +78,48 @@ export default function CustomerManagement() {
     setLoading(true);
 
     if (isEditing) {
-      const { error } = await supabase
-        .from('contacts')
-        .update({
-          full_name: currentCustomer.full_name,
-          phone: currentCustomer.phone,
-          cpf: currentCustomer.cpf,
-          address: currentCustomer.address,
-          number: currentCustomer.number,
-          cep: currentCustomer.cep,
-          neighborhood: currentCustomer.neighborhood,
-          complement: currentCustomer.complement,
-          email: currentCustomer.email
-        })
-        .eq('id', currentCustomer.contact_id);
-
-      if (error) {
-        alert('Erro ao atualizar cliente: ' + error.message);
-      } else {
-        alert('Cliente atualizado com sucesso!');
-        setShowForm(false);
-        fetchCustomers();
-      }
+        const { id, contact_id, ...contactData } = currentCustomer;
+        try {
+            const response = await fetch(`${apiBackendUrl}/api/customers/${contact_id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(contactData)
+            });
+            if (!response.ok) throw new Error("Falha ao atualizar cliente.");
+            alert('Cliente atualizado com sucesso!');
+            setShowForm(false);
+            fetchCustomers();
+        } catch (error) {
+            alert('Erro ao atualizar cliente: ' + error.message);
+        }
     } else {
+      // A lógica de criação de usuário ainda precisa do Supabase no frontend por causa da autenticação
+      // ou ser movida para um endpoint de backend que usa o admin key.
+      // Por simplicidade, mantemos a criação aqui por enquanto, mas o ideal seria uma rota no backend.
       const { data: { session: adminSession } } = await supabase.auth.getSession();
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: currentCustomer.email,
         password: Math.random().toString(36).slice(-8),
-        options: {
-          data: {
-            full_name: currentCustomer.full_name,
-            role: 'customer'
-          },
-          phone: currentCustomer.phone 
-        }
+        options: { data: { full_name: currentCustomer.full_name, role: 'customer' }, phone: currentCustomer.phone }
       });
       
-      if (adminSession) {
-        await supabase.auth.setSession(adminSession);
-      }
+      if (adminSession) { await supabase.auth.setSession(adminSession); }
       
       if (authError) {
         alert('Erro ao criar o utilizador: ' + authError.message);
       } else if (authData.user){
+        // Após criar o user, buscamos o contact_id e atualizamos com os dados do formulário
         const { data: profileData } = await supabase.from('profiles').select('contact_id').eq('id', authData.user.id).single();
-
         if (profileData) {
-            const { error: contactError } = await supabase
-              .from('contacts')
-              .update({
-                full_name: currentCustomer.full_name,
-                phone: currentCustomer.phone,
-                cpf: currentCustomer.cpf,
-                address: currentCustomer.address,
-                number: currentCustomer.number,
-                cep: currentCustomer.cep,
-                neighborhood: currentCustomer.neighborhood,
-                complement: currentCustomer.complement
-              })
-              .eq('id', profileData.contact_id);
-            
-            if (contactError) {
-              alert('Utilizador criado, mas falha ao salvar detalhes do contato: ' + contactError.message);
-            } else {
+            const { id, ...contactData } = currentCustomer; // remove o id nulo
+            const response = await fetch(`${apiBackendUrl}/api/customers/${profileData.contact_id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(contactData)
+            });
+            if(!response.ok) alert('Utilizador criado, mas falha ao salvar detalhes do contato.');
+            else {
               alert('Cliente criado com sucesso!');
               setShowForm(false);
               fetchCustomers();
